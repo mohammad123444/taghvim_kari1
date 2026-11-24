@@ -65,7 +65,7 @@ fun SettingsScreen(viewModel: PeopleViewModel) {
                     Surface(
                         color = if (on) Purple else Purple.copy(alpha = .12f),
                         shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).clickable { viewModel.setTextSize(size) }
+                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).clickable { viewModel.updateTextSize(size) }
                     ) {
                         Text(
                             size.title,

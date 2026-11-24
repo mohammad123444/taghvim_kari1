@@ -95,7 +95,7 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
     var textSize: TextSize by mutableStateOf(uiPrefs.textSize)
         private set
 
-    fun setTextSize(size: TextSize) {
+    fun updateTextSize(size: TextSize) {
         textSize = size
         uiPrefs.textSize = size
     }
