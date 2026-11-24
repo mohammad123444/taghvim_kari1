@@ -177,7 +177,7 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
                     "در فایل دریافتی ${incoming.people.size.toPersian()} نفر هست. فهرست نیروهای فعلی این گوشی " +
                         "(${viewModel.people.size.toPersian()} نفر) کاملاً با آن جایگزین می‌شود." +
                         (if (incoming.reports != null || incoming.evaluations != null) {
-                            " گزارش‌ها و ارزیابی‌های موجود در فایل به اطلاعات فعلی اضافه می‌شود و چیزی از آن‌ها حذف نمی‌شود."
+                            " سوابق و ارزیابی‌های موجود در فایل به اطلاعات فعلی اضافه می‌شود و چیزی از آن‌ها حذف نمی‌شود."
                         } else "") +
                         " ادامه می‌دهید؟"
                 )
@@ -191,13 +191,13 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
         val merge = viewModel.previewReportMerge(incoming)
         AlertDialog(
             onDismissRequest = viewModel::cancelReportImport,
-            title = { Text("دریافت گزارش‌ها", fontWeight = FontWeight.Bold) },
+            title = { Text("دریافت سوابق", fontWeight = FontWeight.Bold) },
             text = {
                 ScrollText(
-                    "در فایل دریافتی ${incoming.size.toPersian()} گزارش هست: " +
+                    "در فایل دریافتی ${incoming.size.toPersian()} سابقه هست: " +
                         "${merge.added.toPersian()} مورد جدید، ${merge.updated.toPersian()} مورد به‌روزشده و " +
                         "${merge.unchanged.toPersian()} مورد بدون تغییر. " +
-                        "گزارش‌های فعلی این گوشی حذف نمی‌شوند و فقط این موارد به آن‌ها اضافه می‌شود. ادامه می‌دهید؟"
+                        "سوابق فعلی این گوشی حذف نمی‌شوند و فقط این موارد به آن‌ها اضافه می‌شود. ادامه می‌دهید؟"
                 )
             },
             confirmButton = { TextButton(onClick = viewModel::confirmReportImport) { Text("اضافه کن", fontWeight = FontWeight.Bold) } },
@@ -237,7 +237,7 @@ private const val PAGE_EVALUATION = 4
 private const val PAGE_SETTINGS = 5
 
 /** The blue header shows the title of the current page (indexes as in the bottom bar; 5 = settings). */
-private val PAGE_TITLES = listOf("تقویم", "مدیریت نیروها", "مقایسه", "گزارش تشویق و تنبیه", "ارزیابی نیروها", "تنظیمات")
+private val PAGE_TITLES = listOf("تقویم", "مدیریت نیروها", "مقایسه", "سوابق تشویق و تنبیه", "ارزیابی نیروها", "تنظیمات")
 
 @Composable
 private fun AppHeader(title: String, settingsOpen: Boolean, onSettings: () -> Unit) {
@@ -308,7 +308,7 @@ private fun AppNavigation(selected: Int, onSelect: (Int) -> Unit) {
         )
         NavigationBarItem(
             selected = selected == 3, onClick = { onSelect(3) },
-            icon = { Icon(Icons.Default.Edit, contentDescription = null) }, label = { Text("گزارش", maxLines = 1) }
+            icon = { Icon(Icons.Default.Edit, contentDescription = null) }, label = { Text("سوابق", maxLines = 1) }
         )
         NavigationBarItem(
             selected = selected == PAGE_EVALUATION, onClick = { onSelect(PAGE_EVALUATION) },

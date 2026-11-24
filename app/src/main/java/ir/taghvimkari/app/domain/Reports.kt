@@ -50,11 +50,11 @@ fun buildReportText(
 ): String {
     val all = entries.totals()
     return buildString {
-        appendLine("گزارش تشویق و تنبیه")
+        appendLine("سوابق تشویق و تنبیه")
         appendLine("بازه: $periodLabel")
         appendLine("نفرات: $scopeLabel")
         appendLine(
-            "تعداد گزارش: ${all.count.toPersian()} • تشویق: ${formatHours(all.reward)} ساعت • " +
+            "تعداد سوابق: ${all.count.toPersian()} • تشویق: ${formatHours(all.reward)} ساعت • " +
                 "تنبیه: ${formatHours(all.punishment)} ساعت • خالص: ${formatHours(all.net)} ساعت"
         )
         val byPerson = entries.groupBy { nameOf(it) }

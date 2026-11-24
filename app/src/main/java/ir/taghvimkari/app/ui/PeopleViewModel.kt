@@ -248,7 +248,7 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
         val removed = reports.getOrNull(index) ?: return
         reports = reports.filterNot { it.id == id }
         reportStore.save(reports)
-        offerUndo("گزارش «${removed.title}» حذف شد") {
+        offerUndo("سابقهٔ «${removed.title}» حذف شد") {
             reports = restoreAt(reports, removed, index) { it.id == removed.id }
             reportStore.save(reports)
         }
@@ -271,6 +271,18 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
         evaluationStore.save(evaluations)
         offerUndo("ارزیابی «${removed.personName}» حذف شد") {
             evaluations = restoreAt(evaluations, removed, index) { it.id == removed.id }
+            evaluationStore.save(evaluations)
+        }
+    }
+
+    /** Deletes several evaluations at once (the filtered result list); one snackbar takes all of them back. */
+    fun deleteEvaluations(ids: Set<String>) {
+        val removed = evaluations.filter { it.id in ids }
+        if (removed.isEmpty()) return
+        evaluations = evaluations.filterNot { it.id in ids }
+        evaluationStore.save(evaluations)
+        offerUndo("${removed.size} ارزیابی حذف شد") {
+            evaluations = evaluations + removed.filter { r -> evaluations.none { it.id == r.id } }
             evaluationStore.save(evaluations)
         }
     }

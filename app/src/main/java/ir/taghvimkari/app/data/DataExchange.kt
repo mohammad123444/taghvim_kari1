@@ -17,7 +17,7 @@ import java.time.LocalDate
  * Sending and receiving data as JSON files. There are three separate kinds of file, one per place in the app:
  *  - "people":      the staff list (ثبت نیروها)        {"app":"taghvim-kari","format":1,"type":"people","people":[...]}
  *  - "evaluations": evaluations (ارزیابی)               {"app":"taghvim-kari","format":1,"type":"evaluations","evaluations":[...]}
- *  - "reports":     reward/punishment reports (گزارش)   {"app":"taghvim-kari","format":1,"type":"reports","reports":[...]}
+ *  - "reports":     reward/punishment reports (سوابق)   {"app":"taghvim-kari","format":1,"type":"reports","reports":[...]}
  * Files without "type" are the old all-in-one files of earlier versions; they can still be received.
  */
 data class ExchangeData(
@@ -77,7 +77,7 @@ object DataExchange {
                     }
                     TYPE_REPORTS -> {
                         val list = obj.optJSONArray("reports")?.let { ReportStore.decode(it) }.orEmpty()
-                        require(list.isNotEmpty()) { "در این فایل گزارشی وجود ندارد." }
+                        require(list.isNotEmpty()) { "در این فایل سابقه‌ای وجود ندارد." }
                         Incoming.Reports(list)
                     }
                     else -> {
@@ -132,7 +132,7 @@ object DataExchange {
         shareJson(context, "taghvim-evaluations-${LocalDate.now()}.json", encodeEvaluations(evaluations), "ارسال ارزیابی‌ها")
 
     fun shareReports(context: Context, reports: List<ReportEntry>): Boolean =
-        shareJson(context, "taghvim-reports-${LocalDate.now()}.json", encodeReports(reports), "ارسال گزارش‌ها")
+        shareJson(context, "taghvim-reports-${LocalDate.now()}.json", encodeReports(reports), "ارسال سوابق")
 
     /**
      * Monthly backup: the same three separate files as the three send buttons (staff, evaluations, reports),

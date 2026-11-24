@@ -59,7 +59,7 @@ fun SettingsScreen(viewModel: PeopleViewModel) {
         ) {
             Text("نیروهای ثبت‌شده: ${people.size.toPersian()} نفر")
             Text("سرشیفت‌ها: ${people.count { it.isLeader }.toPersian()} نفر")
-            Text("گزارش‌های تشویق و تنبیه: ${viewModel.reports.size.toPersian()} مورد")
+            Text("سوابق تشویق و تنبیه: ${viewModel.reports.size.toPersian()} مورد")
             Text("ارزیابی‌ها: ${viewModel.evaluations.size.toPersian()} مورد")
         }
 

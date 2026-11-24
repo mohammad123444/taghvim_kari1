@@ -110,9 +110,9 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Button(onClick = { showNew = true }, enabled = people.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("+ ثبت گزارش") }
+        Button(onClick = { showNew = true }, enabled = people.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("+ ثبت سابقه") }
         if (people.isEmpty()) {
-            EmptyMessage("ابتدا در بخش «نیروها» افراد را ثبت کنید، بعد برایشان گزارش بنویسید.")
+            EmptyMessage("ابتدا در بخش «نیروها» افراد را ثبت کنید، بعد برایشان سابقه ثبت کنید.")
         }
 
         // ----- filters
@@ -170,7 +170,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
             },
             enabled = filtered.isNotEmpty(),
             modifier = Modifier.fillMaxWidth()
-        ) { Text("ارسال گزارش متنی") }
+        ) { Text("ارسال سوابق متنی") }
 
         // ----- summary
         Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
@@ -192,7 +192,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
                 }
                 ShareBar(totals.reward, totals.punishment, height = 12.dp)
                 Text(
-                    "${totals.count.toPersian()} گزارش در این بازه",
+                    "${totals.count.toPersian()} سابقه در این بازه",
                     color = Color.Gray,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -216,7 +216,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
                             }
                             ShareBar(t.reward, t.punishment, height = 8.dp)
                             Text(
-                                "تشویق ${formatHours(t.reward)} • تنبیه ${formatHours(t.punishment)} • ${t.count.toPersian()} گزارش",
+                                "تشویق ${formatHours(t.reward)} • تنبیه ${formatHours(t.punishment)} • ${t.count.toPersian()} سابقه",
                                 color = Color.Gray,
                                 style = MaterialTheme.typography.labelSmall
                             )
@@ -228,13 +228,13 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
 
         // ----- entries
         Text(
-            "گزارش‌ها (${filtered.size.toPersian()})",
+            "سوابق (${filtered.size.toPersian()})",
             fontWeight = FontWeight.Bold,
             color = Navy,
             style = MaterialTheme.typography.titleMedium
         )
         if (filtered.isEmpty()) {
-            EmptyMessage("در این بازه گزارشی ثبت نشده است.")
+            EmptyMessage("در این بازه سابقه‌ای ثبت نشده است.")
         }
         filtered.forEach { e -> ReportCard(e, nameOf(e)) { editingId = e.id } }
     }
@@ -368,7 +368,7 @@ private fun ReportEntryDialog(
 
     FormDialog(
         onDismiss = onDismiss,
-        title = if (initial == null) "ثبت گزارش جدید" else "ویرایش گزارش",
+        title = if (initial == null) "ثبت سابقهٔ جدید" else "ویرایش سابقه",
         content = {
                 PersonSearchField(
                     label = "نفر",
@@ -385,7 +385,7 @@ private fun ReportEntryDialog(
                 }
                 OutlinedTextField(
                     value = title, onValueChange = { title = it },
-                    label = { Text("گزارش (موضوع)") },
+                    label = { Text("سابقه (موضوع)") },
                     minLines = 2,
                     isError = showErrors && title.isBlank(),
                     modifier = Modifier.fillMaxWidth()
@@ -447,7 +447,7 @@ private fun ReportEntryDialog(
     if (showPicker) {
         JalaliDatePickerDialog(
             initial = date,
-            title = "تاریخ گزارش",
+            title = "تاریخ سابقه",
             onDismiss = { showPicker = false },
             onPick = { dateEpoch = it.toEpochDay(); showPicker = false }
         )
@@ -489,6 +489,6 @@ private fun periodFor(mode: Int, now: JalaliDate, customFrom: Long, customTo: Lo
 internal fun shareText(context: Context, text: String) {
     val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
     runCatching {
-        context.startActivity(Intent.createChooser(send, "ارسال گزارش").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        context.startActivity(Intent.createChooser(send, "ارسال سوابق").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 }
