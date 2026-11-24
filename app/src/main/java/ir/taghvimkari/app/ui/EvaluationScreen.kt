@@ -654,16 +654,15 @@ private fun EvaluationFormDialog(
                             color = levelColor(Evaluations.levelOf(final))
                         )
                     }
-                    Button(onClick = { onSave(scores) }, enabled = complete, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (position < total) "ذخیره و نفر بعدی" else "ذخیره و پایان")
-                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { onSave(scores) }, enabled = complete, modifier = Modifier.weight(1f)) {
+                            Text("ذخیره")
+                        }
                         OutlinedButton(
                             onClick = { onSave(scores) },
                             enabled = done > 0 && !complete,
                             modifier = Modifier.weight(1f)
                         ) { Text("ذخیرهٔ ناتمام") }
-                        TextButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("بستن") }
                     }
                 }
             }

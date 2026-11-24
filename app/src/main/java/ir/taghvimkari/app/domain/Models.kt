@@ -47,8 +47,13 @@ data class Person(
     val leaderId: String? = null,
     val category: Category = Category.OPERATIONAL,
     /** May evaluate other people (ارزیاب). Shift leaders are evaluators by default. */
-    val canEvaluate: Boolean = false
+    val canEvaluate: Boolean = false,
+    /** Shift name: "A", "B", "C" or "D" (empty for older saves). */
+    val shiftName: String = ""
 )
+
+/** The four shift names offered when registering a person. */
+val SHIFT_NAMES: List<String> = listOf("A", "B", "C", "D")
 
 /** Single source of truth for work-type labels (they used to be built in three places with different digits). */
 object WorkTypes {

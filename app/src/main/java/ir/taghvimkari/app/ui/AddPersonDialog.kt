@@ -31,6 +31,7 @@ import ir.taghvimkari.app.domain.Employment
 import ir.taghvimkari.app.domain.JalaliDate
 import ir.taghvimkari.app.domain.Pattern
 import ir.taghvimkari.app.domain.Person
+import ir.taghvimkari.app.domain.SHIFT_NAMES
 import ir.taghvimkari.app.domain.ShiftEngine
 import ir.taghvimkari.app.domain.WorkTypes
 import ir.taghvimkari.app.domain.toPersian
@@ -58,6 +59,7 @@ fun AddPersonDialog(
     var category by remember { mutableStateOf(initial?.category ?: Category.OPERATIONAL) }
     var applyToMembers by rememberSaveable { mutableStateOf(true) }
     var pattern by remember { mutableStateOf(initial?.pattern ?: Pattern.DAY_NIGHT_REST) }
+    var shiftName by rememberSaveable { mutableStateOf(if (initial == null) SHIFT_NAMES.first() else initial.shiftName) }
     var startEpochDay by rememberSaveable { mutableStateOf((initial?.startDate ?: today).toEpochDay()) }
     var isLeader by rememberSaveable { mutableStateOf(initial?.isLeader ?: false) }
     var membersText by rememberSaveable { mutableStateOf("") }
@@ -83,6 +85,7 @@ fun AddPersonDialog(
                 FilterDropdown("نوع نیرو", Category.entries.map { it.title }, category.title) { v ->
                     category = Category.entries.first { it.title == v }
                 }
+                FilterDropdown("نام شیفت", SHIFT_NAMES, shiftName) { v -> shiftName = v }
                 FilterDropdown("الگوی شیفت", Pattern.entries.map { it.title }, pattern.title) { v ->
                     pattern = Pattern.entries.first { it.title == v }
                 }
@@ -144,7 +147,9 @@ fun AddPersonDialog(
                         active = initial?.active ?: true,
                         isLeader = isLeader,
                         leaderId = initial?.leaderId,
-                        category = category
+                        category = category,
+                        canEvaluate = initial?.canEvaluate ?: false,
+                        shiftName = shiftName
                     )
                     val members = if (isLeader) {
                         memberNames.map { n ->
@@ -157,7 +162,8 @@ fun AddPersonDialog(
                                 startDate = startDate,
                                 startWeekday = weekday,
                                 leaderId = head.id,
-                                category = category
+                                category = category,
+                                shiftName = shiftName
                             )
                         }
                     } else {

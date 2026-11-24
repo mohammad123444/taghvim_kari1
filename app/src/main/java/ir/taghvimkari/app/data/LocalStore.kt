@@ -5,6 +5,7 @@ import ir.taghvimkari.app.domain.Category
 import ir.taghvimkari.app.domain.Employment
 import ir.taghvimkari.app.domain.Pattern
 import ir.taghvimkari.app.domain.Person
+import ir.taghvimkari.app.domain.SHIFT_NAMES
 import ir.taghvimkari.app.domain.WorkTypes
 import org.json.JSONArray
 import org.json.JSONObject
@@ -48,7 +49,8 @@ class LocalStore(context: Context) {
                         if (pattern == Pattern.OFFICIAL_DAYS) Category.ADMIN else Category.OPERATIONAL
                     },
                     // Older saves have no such field: shift leaders were the evaluators.
-                    canEvaluate = o.optBoolean("canEvaluate", leader)
+                    canEvaluate = o.optBoolean("canEvaluate", leader),
+                    shiftName = o.optString("shiftName", "").takeIf { it in SHIFT_NAMES } ?: ""
                 )
             }.getOrNull()
         }
@@ -70,6 +72,7 @@ class LocalStore(context: Context) {
                         put("leaderId", p.leaderId ?: "")
                         put("category", p.category.name)
                         put("canEvaluate", p.canEvaluate)
+                        put("shiftName", p.shiftName)
                     }
                 )
             }

@@ -336,6 +336,7 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
                     p.copy(
                         employment = if (head.employment != old.employment) head.employment else p.employment,
                         category = if (head.category != old.category) head.category else p.category,
+                        shiftName = if (head.shiftName != old.shiftName) head.shiftName else p.shiftName,
                         pattern = if (head.pattern != old.pattern) head.pattern else p.pattern,
                         startDate = if (dateChanged) head.startDate else p.startDate,
                         startWeekday = if (dateChanged) head.startWeekday else p.startWeekday

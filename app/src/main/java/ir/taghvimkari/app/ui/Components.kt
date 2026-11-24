@@ -128,7 +128,7 @@ fun PersonCard(person: Person, status: DayStatus? = null, leaderName: String? = 
                     Spacer(Modifier.height(4.dp))
                     Surface(color = Purple.copy(alpha = .10f), shape = RoundedCornerShape(8.dp)) {
                         Text(
-                            person.category.title,
+                            person.category.title + if (person.shiftName.isNotBlank()) " • شیفت ${person.shiftName}" else "",
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             color = Purple,
                             style = MaterialTheme.typography.labelSmall,
