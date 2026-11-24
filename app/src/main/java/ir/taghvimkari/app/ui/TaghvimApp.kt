@@ -284,7 +284,7 @@ private fun BackupReminderCard(days: Long?, failed: Boolean, onSend: () -> Unit,
             )
             if (failed) Text("ارسال انجام نشد.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onSend, modifier = Modifier.weight(1f)) { Text("ارسال پشتیبان") }
+                Button(onClick = onSend, modifier = Modifier.weight(1f)) { Text("ارسال") }
                 OutlinedButton(onClick = onLater, modifier = Modifier.weight(1f)) { Text("بعداً") }
             }
         }

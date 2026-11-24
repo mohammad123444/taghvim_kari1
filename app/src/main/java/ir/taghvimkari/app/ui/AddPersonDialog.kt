@@ -105,10 +105,6 @@ fun AddPersonDialog(
                             Modifier.weight(1f),
                             fontWeight = FontWeight.Bold
                         )
-                        HelpTip(
-                            "اگر روشن باشد، فقط مواردی که اینجا تغییر می‌دهید (استخدامی، نوع نیرو، الگو، تاریخ شروع) به زیرمجموعه‌ها هم داده می‌شود؛ " +
-                                "نام‌ها و بقیهٔ موارد دست‌نخورده می‌ماند. اگر خاموش باشد، تغییرات فقط برای خود سرشیفت ثبت می‌شود."
-                        )
                         Switch(checked = applyToMembers, onCheckedChange = { applyToMembers = it })
                     }
                 }

@@ -64,7 +64,6 @@ fun PeopleScreen(
                 label = { Text("جستجو بر اساس نام") },
                 singleLine = true
             )
-            HelpTip("برای ثبت نیروی تازه، دکمهٔ + را بزنید. برای ویرایش یا حذف، روی هر نفر بزنید.")
             FilledIconButton(onClick = onAdd) { Icon(Icons.Default.Add, contentDescription = "افزودن نیرو") }
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -86,9 +85,6 @@ fun PeopleScreen(
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item {
                 ExchangeBar(
-                    warning = "اطلاعات دریافتی، پس از تأیید، جایگزین فهرست نیروهای این گوشی می‌شود.",
-                    help = "فقط اطلاعات ثبت نیروها (نیروها، سرشیفت‌ها و زیرمجموعه‌ها) ارسال می‌شود؛ ارزیابی و گزارش‌ها جدا و از بخش خودشان ارسال می‌شوند.",
-                    sendLabel = "ارسال اطلاعات نیروها",
                     sendEnabled = people.isNotEmpty(),
                     sendFailed = sendFailed,
                     onSend = onSend,

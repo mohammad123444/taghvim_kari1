@@ -84,10 +84,6 @@ fun DashboardScreen(people: List<Person>) {
                 fontWeight = FontWeight.Bold,
                 color = Navy
             )
-            HelpTip(
-                "روی هر روز بزنید تا وضعیت حضور نیروها نمایش داده شود. عدد زیر هر روز، تعداد افراد حاضر است. " +
-                    "برای رفتن به ماه قبل یا بعد، تقویم را به چپ و راست بکشید یا از فلش‌های بالا استفاده کنید."
-            )
         }
         Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
             Row(Modifier.fillMaxWidth().padding(vertical = 18.dp, horizontal = 8.dp)) {

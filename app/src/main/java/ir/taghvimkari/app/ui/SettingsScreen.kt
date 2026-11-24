@@ -79,7 +79,7 @@ fun SettingsScreen(viewModel: PeopleViewModel) {
             }
         }
 
-        SettingsCard("پشتیبان‌گیری", help = "نیروها، ارزیابی‌ها و گزارش‌ها به‌صورت سه فایل جدا و با یک ارسال فرستاده می‌شوند. هر فایل را گیرنده جداگانه با «دریافت از فایل» می‌گیرد. هر ماه یک بار یادآوری می‌شود.") {
+        SettingsCard("پشتیبان‌گیری") {
             val days = daysSinceBackup(LocalDate.now().toEpochDay(), viewModel.lastBackup)
             Text(
                 if (viewModel.lastBackup == null) "هنوز پشتیبان نگرفته‌اید."
@@ -90,15 +90,14 @@ fun SettingsScreen(viewModel: PeopleViewModel) {
                 onClick = { backupFailed = !viewModel.sendBackup(context) },
                 enabled = people.isNotEmpty() || viewModel.reports.isNotEmpty() || viewModel.evaluations.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth()
-            ) { Text("ارسال پشتیبان") }
+            ) { Text("ارسال") }
             if (backupFailed) {
                 Text("ارسال انجام نشد.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         }
 
         SettingsCard(
-            "اطلاعات ذخیره‌شده",
-            help = "اطلاعات روی همین دستگاه ذخیره می‌شود و با حذف برنامه پاک می‌شود؛ برای نگهداری، از «ارسال پشتیبان» استفاده کنید."
+            "اطلاعات ذخیره‌شده"
         ) {
             Text("نیروهای ثبت‌شده: ${people.size.toPersian()} نفر")
             Text("سرشیفت‌ها: ${people.count { it.isLeader }.toPersian()} نفر")
@@ -107,18 +106,11 @@ fun SettingsScreen(viewModel: PeopleViewModel) {
         }
 
         SettingsCard(
-            "دریافت اطلاعات",
-            help = "ارسال هر بخش جداست و دکمهٔ خودش را در همان بخش دارد: «ارسال اطلاعات نیروها» در تب نیروها، «ارسال ارزیابی» در تب ارزیابی (نتایج) و «ارسال گزارش‌ها» در تب گزارش. " +
-                "نوع فایل خودکار تشخیص داده می‌شود. ارزیابی‌ها و گزارش‌های دریافتی با اطلاعات فعلی ادغام می‌شوند و چیزی حذف نمی‌شود. گیرنده می‌تواند روی فایل بزند و با این برنامه باز کند."
+            "دریافت اطلاعات"
         ) {
             OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
-                Text("دریافت اطلاعات از فایل")
+                Text("دریافت")
             }
-            Text(
-                "فهرست نیروهای دریافتی، پس از تأیید، جایگزین فهرست نیروهای این گوشی می‌شود.",
-                color = Color.Gray,
-                style = MaterialTheme.typography.bodySmall
-            )
         }
 
         SettingsCard("بروزرسانی") {
@@ -144,7 +136,7 @@ fun SettingsScreen(viewModel: PeopleViewModel) {
 }
 
 @Composable
-private fun SettingsCard(title: String, help: String? = null, content: @Composable () -> Unit) {
+private fun SettingsCard(title: String, content: @Composable () -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -155,7 +147,6 @@ private fun SettingsCard(title: String, help: String? = null, content: @Composab
                     color = Purple,
                     style = MaterialTheme.typography.titleMedium
                 )
-                if (help != null) HelpTip(help)
             }
             content()
         }

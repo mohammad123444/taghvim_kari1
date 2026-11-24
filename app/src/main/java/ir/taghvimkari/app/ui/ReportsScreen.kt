@@ -157,13 +157,20 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
 
         // ----- send / receive the reports as a file (reports only)
         ExchangeBar(
-            help = "ارسال، گزارش‌های همین بازه و نفر (فیلتر بالا) را به‌صورت فایل می‌فرستد. گیرنده با «دریافت از فایل» آن‌ها را به گزارش‌های خودش اضافه می‌کند؛ چیزی حذف نمی‌شود.",
-            sendLabel = "ارسال گزارش‌ها (${filtered.size.toPersian()})",
             sendEnabled = filtered.isNotEmpty(),
             sendFailed = sendFailed,
             onSend = { sendFailed = !DataExchange.shareReports(context, filtered) },
             onReceive = { filePicker.launch(arrayOf("*/*")) }
         )
+
+        OutlinedButton(
+            onClick = {
+                val text = buildReportText(period.label, filterLabel, filtered, nameOf)
+                shareText(context, text)
+            },
+            enabled = filtered.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("ارسال گزارش متنی") }
 
         // ----- summary
         Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
@@ -189,14 +196,6 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
                     color = Color.Gray,
                     style = MaterialTheme.typography.bodySmall
                 )
-                OutlinedButton(
-                    onClick = {
-                        val text = buildReportText(period.label, filterLabel, filtered, nameOf)
-                        shareText(context, text)
-                    },
-                    enabled = filtered.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("ارسال گزارش (متن)") }
             }
         }
 

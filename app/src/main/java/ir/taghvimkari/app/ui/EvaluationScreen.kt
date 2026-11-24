@@ -728,9 +728,6 @@ private fun ResultsSection(
 
     // ----- send / receive (evaluations only; staff and reports have their own send buttons)
     ExchangeBar(
-        help = "ارسال، ارزیابی‌های فهرست پایین (با فیلتر فعلی، مثلاً فقط یک دورهٔ ارزیابی) را به‌صورت فایل می‌فرستد. " +
-            "گیرنده با «دریافت از فایل» آن‌ها را به ارزیابی‌های خودش اضافه (ادغام) می‌کند؛ هیچ ارزیابی قبلی حذف نمی‌شود.",
-        sendLabel = if (periodFilter.isBlank()) "ارسال همه (${filtered.size.toPersian()})" else "ارسال این دوره (${filtered.size.toPersian()})",
         sendEnabled = filtered.isNotEmpty(),
         sendFailed = sendFailed,
         onSend = { onSend(filtered) },

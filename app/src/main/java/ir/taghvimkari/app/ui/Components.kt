@@ -236,30 +236,6 @@ fun FormDialog(
     }
 }
 
-/**
- * A small «؟» that opens [text] only when touched. Used for explanations that are useful but would
- * otherwise take room on the screen.
- */
-@Composable
-fun HelpTip(text: String, modifier: Modifier = Modifier) {
-    var open by remember { mutableStateOf(false) }
-    Box(
-        modifier.size(40.dp).clip(CircleShape).clickable { open = true },
-        contentAlignment = Alignment.Center
-    ) {
-        Box(Modifier.size(24.dp).clip(CircleShape).background(Purple.copy(alpha = .14f)), contentAlignment = Alignment.Center) {
-            Text("؟", color = Purple, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-        }
-    }
-    if (open) {
-        AlertDialog(
-            onDismissRequest = { open = false },
-            text = { ScrollText(text) },
-            confirmButton = { TextButton(onClick = { open = false }) { Text("باشه") } }
-        )
-    }
-}
-
 /** Dialog body text that scrolls instead of being cut off when the text size is large. */
 @Composable
 fun ScrollText(text: String) {
@@ -269,30 +245,22 @@ fun ScrollText(text: String) {
 /**
  * The send / receive box of one section (staff, evaluations or reports). Every section has its own,
  * separate file: sending one kind of data never includes the others.
- * [warning] is always visible (e.g. "this replaces your list"); [help] is behind the «؟».
  */
 @Composable
 fun ExchangeBar(
-    sendLabel: String,
     sendEnabled: Boolean,
     sendFailed: Boolean,
     onSend: () -> Unit,
-    onReceive: () -> Unit,
-    warning: String? = null,
-    help: String? = null
+    onReceive: () -> Unit
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = onSend, enabled = sendEnabled, modifier = Modifier.weight(1f)) { Text(sendLabel) }
-                OutlinedButton(onClick = onReceive, modifier = Modifier.weight(1f)) { Text("دریافت از فایل") }
-                if (help != null) HelpTip(help)
+                Button(onClick = onSend, enabled = sendEnabled, modifier = Modifier.weight(1f)) { Text("ارسال") }
+                OutlinedButton(onClick = onReceive, modifier = Modifier.weight(1f)) { Text("دریافت") }
             }
             if (sendFailed) {
                 Text("ارسال انجام نشد.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
-            if (warning != null) {
-                Text(warning, color = Color.Gray, style = MaterialTheme.typography.labelSmall)
             }
         }
     }
