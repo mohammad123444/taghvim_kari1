@@ -1,6 +1,7 @@
 package ir.taghvimkari.app.ui
 
 import android.app.Application
+import android.content.Context
 import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -8,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import ir.taghvimkari.app.BuildConfig
+import ir.taghvimkari.app.data.BackupPrefs
 import ir.taghvimkari.app.data.DataExchange
 import ir.taghvimkari.app.data.ExchangeData
 import ir.taghvimkari.app.data.Incoming
@@ -17,6 +19,7 @@ import ir.taghvimkari.app.data.LocalStore
 import ir.taghvimkari.app.data.UpdateChecker
 import ir.taghvimkari.app.data.UpdateInfo
 import ir.taghvimkari.app.data.UpdateInstaller
+import ir.taghvimkari.app.data.UiPrefs
 import ir.taghvimkari.app.data.UpdateResult
 import ir.taghvimkari.app.domain.EvaluationEntry
 import ir.taghvimkari.app.domain.EvaluationMerge
@@ -24,7 +27,13 @@ import ir.taghvimkari.app.domain.ReportMerge
 import ir.taghvimkari.app.domain.mergeEvaluations
 import ir.taghvimkari.app.domain.mergeReports
 import ir.taghvimkari.app.domain.Person
+import ir.taghvimkari.app.domain.BACKUP_SNOOZE_DAYS
 import ir.taghvimkari.app.domain.ReportEntry
+import ir.taghvimkari.app.domain.TextSize
+import ir.taghvimkari.app.domain.WorkingDraft
+import ir.taghvimkari.app.domain.backupReminderDue
+import ir.taghvimkari.app.domain.restoreAt
+import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -40,11 +49,17 @@ sealed interface UpdateUi {
     data class DownloadFailed(val info: UpdateInfo) : UpdateUi
 }
 
+/** A deletion that can still be taken back: the snackbar shows [message] with a "بازگرداندن" button that runs [restore]. */
+class UndoAction(val id: Long, val message: String, val restore: () -> Unit)
+
 class PeopleViewModel(app: Application) : AndroidViewModel(app) {
     private val store = LocalStore(app)
     private val reportStore = ReportStore(app)
     private val evaluationStore = EvaluationStore(app)
+    private val uiPrefs = UiPrefs(app)
+    private val backupPrefs = BackupPrefs(app)
     private var checkInFlight = false
+    private var undoCounter = 0L
 
     var people: List<Person> by mutableStateOf(store.load())
         private set
@@ -75,6 +90,102 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
 
     var importError: String? by mutableStateOf(null)
         private set
+
+    // ------------------------------------------------------------------ text size
+    var textSize: TextSize by mutableStateOf(uiPrefs.textSize)
+        private set
+
+    fun setTextSize(size: TextSize) {
+        textSize = size
+        uiPrefs.textSize = size
+    }
+
+    // ------------------------------------------------------------------ undo
+    /** The last deletion, offered for undo by the snackbar. Only the latest one can be taken back. */
+    var undo: UndoAction? by mutableStateOf(null)
+        private set
+
+    private fun offerUndo(message: String, restore: () -> Unit) {
+        undoCounter += 1
+        undo = UndoAction(undoCounter, message, restore)
+    }
+
+    /** Called by the snackbar when it was dismissed or used (only if it is still the same deletion). */
+    fun clearUndo(id: Long) {
+        if (undo?.id == id) undo = null
+    }
+
+    // ------------------------------------------------------------------ working draft (evaluation round in progress)
+    var workingDraft: WorkingDraft? by mutableStateOf(uiPrefs.workingDraft)
+        private set
+
+    private fun setDraft(draft: WorkingDraft?) {
+        workingDraft = draft
+        uiPrefs.workingDraft = draft
+    }
+
+    /** Starts a round: [personIds] are scored one after another for the period [fromEpoch]..[toEpoch]. */
+    fun startDraft(evaluatorId: String, personIds: List<String>, fromEpoch: Long, toEpoch: Long) {
+        if (personIds.isEmpty()) return
+        val old = workingDraft
+        val new = WorkingDraft(evaluatorId, fromEpoch, maxOf(fromEpoch, toEpoch), personIds)
+        setDraft(new)
+        // Starting another round (e.g. editing one finished evaluation) must not silently lose the unfinished one.
+        if (old != null && old != new) offerUndo("ارزیابی ناتمام قبلی جایگزین شد") { setDraft(old) }
+    }
+
+    /** Remembers the scores typed so far for the current person (called after every tap). */
+    fun updateDraftScores(scores: String) {
+        workingDraft?.let { setDraft(it.copy(scores = scores)) }
+    }
+
+    /** The current person is finished (saved or skipped). Returns true when the whole round is over. */
+    fun advanceDraft(): Boolean {
+        val next = workingDraft?.advanced()
+        setDraft(next)
+        return next == null
+    }
+
+    /** Throws the round away; "بازگرداندن" brings it back. */
+    fun discardDraft() {
+        val old = workingDraft ?: return
+        setDraft(null)
+        offerUndo("ارزیابی ناتمام کنار گذاشته شد") { if (workingDraft == null) setDraft(old) }
+    }
+
+    // ------------------------------------------------------------------ backup reminder
+    private var lastBackupDay: Long? by mutableStateOf(backupPrefs.lastBackupDay)
+    private var snoozedUntilDay: Long? by mutableStateOf(backupPrefs.snoozedUntilDay)
+
+    /** Epoch day of the last backup, or null. */
+    val lastBackup: Long? get() = lastBackupDay
+
+    /** True when the monthly backup reminder should be on screen. */
+    val backupReminderVisible: Boolean
+        get() = backupReminderDue(
+            LocalDate.now().toEpochDay(), lastBackupDay, snoozedUntilDay,
+            hasData = people.isNotEmpty() || reports.isNotEmpty() || evaluations.isNotEmpty()
+        )
+
+    /** The reminder was closed: it stays away for a few days. */
+    fun snoozeBackupReminder() {
+        val until = LocalDate.now().toEpochDay() + BACKUP_SNOOZE_DAYS
+        snoozedUntilDay = until
+        backupPrefs.snoozedUntilDay = until
+    }
+
+    /** Sends staff, evaluations and reports (three files, one share). Returns false if nothing could be sent. */
+    fun sendBackup(context: Context): Boolean {
+        val ok = DataExchange.shareBackup(context, people, evaluations, reports)
+        if (ok) {
+            val today = LocalDate.now().toEpochDay()
+            lastBackupDay = today
+            backupPrefs.lastBackupDay = today
+            snoozedUntilDay = null
+            backupPrefs.snoozedUntilDay = null
+        }
+        return ok
+    }
 
     init {
         if (updatesEnabled) checkForUpdate(manual = false)
@@ -133,8 +244,14 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun deleteReport(id: String) {
+        val index = reports.indexOfFirst { it.id == id }
+        val removed = reports.getOrNull(index) ?: return
         reports = reports.filterNot { it.id == id }
         reportStore.save(reports)
+        offerUndo("گزارش «${removed.title}» حذف شد") {
+            reports = restoreAt(reports, removed, index) { it.id == removed.id }
+            reportStore.save(reports)
+        }
     }
 
     /** Adds a new evaluation or replaces the one with the same id. */
@@ -148,8 +265,14 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun deleteEvaluation(id: String) {
+        val index = evaluations.indexOfFirst { it.id == id }
+        val removed = evaluations.getOrNull(index) ?: return
         evaluations = evaluations.filterNot { it.id == id }
         evaluationStore.save(evaluations)
+        offerUndo("ارزیابی «${removed.personName}» حذف شد") {
+            evaluations = restoreAt(evaluations, removed, index) { it.id == removed.id }
+            evaluationStore.save(evaluations)
+        }
     }
 
     fun cancelImport() {
@@ -225,8 +348,14 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun remove(id: String) {
+        val index = people.indexOfFirst { it.id == id }
+        val removed = people.getOrNull(index) ?: return
         people = people.filterNot { it.id == id }
         commit()
+        offerUndo("«${removed.name}» حذف شد") {
+            people = restoreAt(people, removed, index) { it.id == removed.id }
+            commit()
+        }
     }
 
     /** [manual] = the user tapped the button, so "up to date" and errors are reported; automatic checks stay silent. */

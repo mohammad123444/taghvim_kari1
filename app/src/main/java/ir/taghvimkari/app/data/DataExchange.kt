@@ -1,5 +1,6 @@
 package ir.taghvimkari.app.data
 
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -132,4 +133,37 @@ object DataExchange {
 
     fun shareReports(context: Context, reports: List<ReportEntry>): Boolean =
         shareJson(context, "taghvim-reports-${LocalDate.now()}.json", encodeReports(reports), "ارسال گزارش‌ها")
+
+    /**
+     * Monthly backup: the same three separate files as the three send buttons (staff, evaluations, reports),
+     * handed to the share sheet together so one tap sends them all. Empty kinds are left out.
+     */
+    fun shareBackup(
+        context: Context,
+        people: List<Person>,
+        evaluations: List<EvaluationEntry>,
+        reports: List<ReportEntry>
+    ): Boolean = runCatching {
+        val today = LocalDate.now()
+        val files = buildList {
+            if (people.isNotEmpty()) add("taghvim-people-$today.json" to encodePeople(people))
+            if (evaluations.isNotEmpty()) add("taghvim-evaluations-$today.json" to encodeEvaluations(evaluations))
+            if (reports.isNotEmpty()) add("taghvim-reports-$today.json" to encodeReports(reports))
+        }
+        require(files.isNotEmpty())
+        val dir = File(context.cacheDir, "shared").apply { mkdirs() }
+        dir.listFiles()?.forEach { it.delete() }
+        val uris = ArrayList<Uri>()
+        files.forEach { (name, json) ->
+            val file = File(dir, name)
+            file.writeText(json, Charsets.UTF_8)
+            uris.add(FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file))
+        }
+        val send = Intent(Intent.ACTION_SEND_MULTIPLE)
+            .setType(MIME)
+            .putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        send.clipData = ClipData.newRawUri(null, uris.first()).also { clip -> uris.drop(1).forEach { clip.addItem(ClipData.Item(it)) } }
+        context.startActivity(Intent.createChooser(send, "پشتیبان‌گیری").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }.isSuccess
 }

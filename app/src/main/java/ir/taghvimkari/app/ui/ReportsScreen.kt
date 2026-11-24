@@ -82,7 +82,6 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
     var personFilter by rememberSaveable { mutableStateOf("") }
     var showNew by rememberSaveable { mutableStateOf(false) }
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
-    var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
     var sendFailed by rememberSaveable { mutableStateOf(false) }
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -111,16 +110,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "گزارش تشویق و تنبیه",
-                Modifier.weight(1f),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = Navy
-            )
-            Button(onClick = { showNew = true }, enabled = people.isNotEmpty()) { Text("+ ثبت گزارش") }
-        }
+        Button(onClick = { showNew = true }, enabled = people.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("+ ثبت گزارش") }
         if (people.isEmpty()) {
             EmptyMessage("ابتدا در بخش «نیروها» افراد را ثبت کنید، بعد برایشان گزارش بنویسید.")
         }
@@ -167,7 +157,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
 
         // ----- send / receive the reports as a file (reports only)
         ExchangeBar(
-            hint = "ارسال، گزارش‌های همین بازه و نفر (فیلتر بالا) را به‌صورت فایل می‌فرستد. گیرنده با «دریافت از فایل» آن‌ها را به گزارش‌های خودش اضافه می‌کند؛ چیزی حذف نمی‌شود.",
+            help = "ارسال، گزارش‌های همین بازه و نفر (فیلتر بالا) را به‌صورت فایل می‌فرستد. گیرنده با «دریافت از فایل» آن‌ها را به گزارش‌های خودش اضافه می‌کند؛ چیزی حذف نمی‌شود.",
             sendLabel = "ارسال گزارش‌ها (${filtered.size.toPersian()})",
             sendEnabled = filtered.isNotEmpty(),
             sendFailed = sendFailed,
@@ -233,7 +223,6 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
                             )
                         }
                     }
-                    Text("برای دیدن گزارش‌های یک نفر، روی نامش بزنید.", color = Color.Gray, style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
@@ -289,22 +278,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
             presetPersonId = "",
             onDismiss = { editingId = null },
             onSave = { viewModel.saveReport(it); editingId = null },
-            onDelete = { deletingId = editing.id; editingId = null }
-        )
-    }
-
-    val deleting = deletingId?.let { id -> reports.firstOrNull { it.id == id } }
-    if (deleting != null) {
-        AlertDialog(
-            onDismissRequest = { deletingId = null },
-            title = { Text("حذف گزارش", fontWeight = FontWeight.Bold) },
-            text = { Text("گزارش «${deleting.title}» برای ${nameOf(deleting)} حذف شود؟ این کار قابل بازگشت نیست.") },
-            confirmButton = {
-                TextButton(onClick = { viewModel.deleteReport(deleting.id); deletingId = null }) {
-                    Text("حذف", color = Color.Red, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = { TextButton(onClick = { deletingId = null }) { Text("انصراف") } }
+            onDelete = { viewModel.deleteReport(editing.id); editingId = null }
         )
     }
 }

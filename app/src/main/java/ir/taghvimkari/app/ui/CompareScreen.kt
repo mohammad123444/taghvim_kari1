@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.sp
 import ir.taghvimkari.app.domain.JalaliDate
 import ir.taghvimkari.app.domain.Person
@@ -103,6 +104,8 @@ private data class CompareRow(val person: Person, val runs: List<Pair<Int, Int>>
 @Composable
 fun CompareScreen(people: List<Person>) {
     val today = remember { LocalDate.now() }
+    // The name column grows with the text size so names and counts are not cut.
+    val nameWidth = NAME_WIDTH * LocalDensity.current.fontScale.coerceIn(1f, 1.5f)
     var selectedText by rememberSaveable { mutableStateOf("") }
     var fromEpoch by rememberSaveable { mutableStateOf(today.toEpochDay()) }
     var toEpoch by rememberSaveable { mutableStateOf(today.plusDays(13).toEpochDay()) }
@@ -163,8 +166,6 @@ fun CompareScreen(people: List<Person>) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text("مقایسهٔ وضعیت کاری", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Navy)
-
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { picker = 1 }, modifier = Modifier.weight(1f)) {
                 Text("از: ${JalaliDate.from(from).display()}")
@@ -207,7 +208,7 @@ fun CompareScreen(people: List<Person>) {
                         Legend(RestColor, "استراحت")
                     }
                     Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
-                        Spacer(Modifier.width(NAME_WIDTH))
+                        Spacer(Modifier.width(nameWidth))
                         Text(JalaliDate.from(from).display(), Modifier.weight(1f), fontSize = 11.sp, color = Color.DarkGray)
                         Text("${days.toPersian()} روز", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Navy)
                         Text(
@@ -220,7 +221,7 @@ fun CompareScreen(people: List<Person>) {
                     }
                     if (days <= 14) {
                         Row(Modifier.fillMaxWidth()) {
-                            Spacer(Modifier.width(NAME_WIDTH))
+                            Spacer(Modifier.width(nameWidth))
                             Row(Modifier.weight(1f)) {
                                 for (i in 0 until days) {
                                     Text(
@@ -236,7 +237,7 @@ fun CompareScreen(people: List<Person>) {
                     }
                     rows.forEach { row ->
                         Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.width(NAME_WIDTH)) {
+                            Column(Modifier.width(nameWidth)) {
                                 Text(
                                     if (row.person.isLeader) "★ ${row.person.name}" else row.person.name,
                                     fontSize = 12.sp,

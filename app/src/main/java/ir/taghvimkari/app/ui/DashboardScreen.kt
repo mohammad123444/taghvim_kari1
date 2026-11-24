@@ -78,17 +78,15 @@ fun DashboardScreen(people: List<Person>) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "وضعیت امروز",
-                Modifier.weight(1f),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = Navy
-            )
-            Text(
                 JalaliDate.longText(today),
+                Modifier.weight(1f),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = Navy
+            )
+            HelpTip(
+                "روی هر روز بزنید تا وضعیت حضور نیروها نمایش داده شود. عدد زیر هر روز، تعداد افراد حاضر است. " +
+                    "برای رفتن به ماه قبل یا بعد، تقویم را به چپ و راست بکشید یا از فلش‌های بالا استفاده کنید."
             )
         }
         Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
@@ -112,12 +110,6 @@ fun DashboardScreen(people: List<Person>) {
                     badge = if (active.isEmpty()) null else { date ->
                         active.count { ShiftEngine.isWorking(it, date) }.toPersian()
                     }
-                )
-                Text(
-                    "روی هر روز بزنید تا وضعیت حضور نیروها نمایش داده شود. عدد زیر هر روز، تعداد افراد حاضر است. برای رفتن به ماه قبل یا بعد، تقویم را به چپ و راست بکشید یا از فلش‌های بالا استفاده کنید.",
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                    color = Color.Gray,
-                    style = MaterialTheme.typography.bodySmall
                 )
             }
         }

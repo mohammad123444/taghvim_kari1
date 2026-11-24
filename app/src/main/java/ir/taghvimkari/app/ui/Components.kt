@@ -17,11 +17,19 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.background
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -229,28 +237,63 @@ fun FormDialog(
 }
 
 /**
+ * A small «؟» that opens [text] only when touched. Used for explanations that are useful but would
+ * otherwise take room on the screen.
+ */
+@Composable
+fun HelpTip(text: String, modifier: Modifier = Modifier) {
+    var open by remember { mutableStateOf(false) }
+    Box(
+        modifier.size(40.dp).clip(CircleShape).clickable { open = true },
+        contentAlignment = Alignment.Center
+    ) {
+        Box(Modifier.size(24.dp).clip(CircleShape).background(Purple.copy(alpha = .14f)), contentAlignment = Alignment.Center) {
+            Text("؟", color = Purple, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        }
+    }
+    if (open) {
+        AlertDialog(
+            onDismissRequest = { open = false },
+            text = { ScrollText(text) },
+            confirmButton = { TextButton(onClick = { open = false }) { Text("باشه") } }
+        )
+    }
+}
+
+/** Dialog body text that scrolls instead of being cut off when the text size is large. */
+@Composable
+fun ScrollText(text: String) {
+    Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) { Text(text) }
+}
+
+/**
  * The send / receive box of one section (staff, evaluations or reports). Every section has its own,
  * separate file: sending one kind of data never includes the others.
+ * [warning] is always visible (e.g. "this replaces your list"); [help] is behind the «؟».
  */
 @Composable
 fun ExchangeBar(
-    hint: String,
     sendLabel: String,
     sendEnabled: Boolean,
     sendFailed: Boolean,
     onSend: () -> Unit,
-    onReceive: () -> Unit
+    onReceive: () -> Unit,
+    warning: String? = null,
+    help: String? = null
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Button(onClick = onSend, enabled = sendEnabled, modifier = Modifier.weight(1f)) { Text(sendLabel) }
                 OutlinedButton(onClick = onReceive, modifier = Modifier.weight(1f)) { Text("دریافت از فایل") }
+                if (help != null) HelpTip(help)
             }
             if (sendFailed) {
                 Text("ارسال انجام نشد.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
-            Text(hint, color = Color.Gray, style = MaterialTheme.typography.labelSmall)
+            if (warning != null) {
+                Text(warning, color = Color.Gray, style = MaterialTheme.typography.labelSmall)
+            }
         }
     }
 }

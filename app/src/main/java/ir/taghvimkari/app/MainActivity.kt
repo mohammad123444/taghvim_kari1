@@ -29,7 +29,7 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         setContent {
-            TaghvimTheme { TaghvimApp(viewModel) }
+            TaghvimTheme(viewModel.textSize) { TaghvimApp(viewModel) }
         }
         if (savedInstanceState == null) handleIncoming(intent)
     }

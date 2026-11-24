@@ -105,17 +105,12 @@ fun AddPersonDialog(
                             Modifier.weight(1f),
                             fontWeight = FontWeight.Bold
                         )
+                        HelpTip(
+                            "اگر روشن باشد، فقط مواردی که اینجا تغییر می‌دهید (استخدامی، نوع نیرو، الگو، تاریخ شروع) به زیرمجموعه‌ها هم داده می‌شود؛ " +
+                                "نام‌ها و بقیهٔ موارد دست‌نخورده می‌ماند. اگر خاموش باشد، تغییرات فقط برای خود سرشیفت ثبت می‌شود."
+                        )
                         Switch(checked = applyToMembers, onCheckedChange = { applyToMembers = it })
                     }
-                    Text(
-                        if (applyToMembers) {
-                            "فقط مواردی که اینجا تغییر می‌دهید (استخدامی، نوع نیرو، الگو، تاریخ شروع) به زیرمجموعه‌ها هم داده می‌شود؛ نام‌ها و بقیهٔ موارد دست‌نخورده می‌ماند."
-                        } else {
-                            "تغییرات فقط برای خود سرشیفت ثبت می‌شود. هر زیرمجموعه را بعداً می‌توانید جدا ویرایش کنید."
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
-                    )
                 }
                 if (isLeader) {
                     OutlinedTextField(
@@ -124,15 +119,13 @@ fun AddPersonDialog(
                         minLines = 3,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Text(
-                        if (memberNames.isEmpty()) {
-                            "همهٔ زیرمجموعه‌ها با همین وضعیت استخدامی، الگو و تاریخ شروع ثبت می‌شوند؛ بعداً هر نفر را جداگانه می‌توانید ویرایش کنید."
-                        } else {
-                            "${memberNames.size.toPersian()} نفر با همین شرایط ثبت می‌شوند."
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
-                    )
+                    if (memberNames.isNotEmpty()) {
+                        Text(
+                            "${memberNames.size.toPersian()} نفر با همین شرایط ثبت می‌شوند.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
                 }
         },
         confirmButton = {

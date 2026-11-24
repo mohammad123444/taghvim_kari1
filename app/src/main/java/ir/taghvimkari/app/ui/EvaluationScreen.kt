@@ -3,12 +3,14 @@ package ir.taghvimkari.app.ui
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.imePadding
@@ -20,6 +22,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -67,7 +73,12 @@ import ir.taghvimkari.app.domain.periodText
 import ir.taghvimkari.app.domain.formatScore
 import ir.taghvimkari.app.domain.normalizeFa
 import ir.taghvimkari.app.domain.sortedAlphabetically
+import ir.taghvimkari.app.domain.WorkingDraft
+import ir.taghvimkari.app.domain.nextFocus
+import ir.taghvimkari.app.domain.previousEvaluation
+import ir.taghvimkari.app.domain.setScoreAt
 import ir.taghvimkari.app.domain.sortedByTeam
+import kotlinx.coroutines.launch
 import ir.taghvimkari.app.domain.toPersian
 import java.time.LocalDate
 import java.util.UUID
@@ -94,20 +105,17 @@ private fun levelColor(level: EvaluationLevel): Color = when (level) {
 /**
  * Evaluations: anyone can be the evaluator (ارزیاب) for an evaluation period (from date .. to date), tick the
  * people to evaluate (ticking a shift leader ticks his whole team), score each one — unfinished evaluations are
- * saved as drafts and can be continued later. Results can be filtered and sent per evaluation period.
+ * saved as drafts and can be continued later. The round in progress (people, period and the scores typed so far)
+ * is saved after every tap, so it survives a tab change or closing the app and is continued from a card on top.
  */
 @Composable
 fun EvaluationScreen(viewModel: PeopleViewModel) {
     val people = viewModel.people
     val evaluations = viewModel.evaluations
+    val draft = viewModel.workingDraft
     var mode by rememberSaveable { mutableStateOf(0) } // 0 new evaluation, 1 results
-    var queueText by rememberSaveable { mutableStateOf("") }
-    var queueIndex by rememberSaveable { mutableStateOf(0) }
-    var sessionEvaluator by rememberSaveable { mutableStateOf("") }
-    var sessionDate by rememberSaveable { mutableStateOf(LocalDate.now().toEpochDay()) }
-    var sessionDateTo by rememberSaveable { mutableStateOf(LocalDate.now().toEpochDay()) }
+    var formOpen by rememberSaveable { mutableStateOf(false) }
     var detailId by rememberSaveable { mutableStateOf<String?>(null) }
-    var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
     var sendFailed by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
 
@@ -116,18 +124,25 @@ fun EvaluationScreen(viewModel: PeopleViewModel) {
     }
 
     fun startSession(evaluatorId: String, personIds: List<String>, fromEpoch: Long, toEpoch: Long) {
-        sessionEvaluator = evaluatorId
-        sessionDate = fromEpoch
-        sessionDateTo = maxOf(fromEpoch, toEpoch)
-        queueText = personIds.joinToString(",")
-        queueIndex = 0
+        viewModel.startDraft(evaluatorId, personIds, fromEpoch, toEpoch)
+        formOpen = true
     }
+
+    // The form must not pop up by itself when a round was thrown away and a new one starts later.
+    LaunchedEffect(draft == null) { if (draft == null) formOpen = false }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("ارزیابی نیروها", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Navy)
+        if (draft != null) {
+            ResumeCard(
+                draft = draft,
+                personName = people.firstOrNull { it.id == draft.currentPersonId }?.name.orEmpty(),
+                onResume = { formOpen = true },
+                onDiscard = { viewModel.discardDraft() }
+            )
+        }
         val drafts = evaluations.count { !it.isComplete }
         ChoiceChips(
             listOf(
@@ -156,52 +171,55 @@ fun EvaluationScreen(viewModel: PeopleViewModel) {
     }
 
     // ----- scoring one person after another
-    val queue = queueText.split(",").filter { it.isNotBlank() }
-    val currentId = queue.getOrNull(queueIndex)
-    if (currentId != null) {
-        val person = people.firstOrNull { it.id == currentId }
-        val advance = {
-            if (queueIndex + 1 >= queue.size) {
-                queueText = ""
-                queueIndex = 0
-                mode = 1
-            } else {
-                queueIndex += 1
-            }
+    if (draft != null && formOpen) {
+        val person = people.firstOrNull { it.id == draft.currentPersonId }
+        val finish = {
+            formOpen = false
+            mode = 1
         }
         if (person == null) {
-            LaunchedEffect(currentId) { advance() }
+            // This person was deleted since the round started: skip him.
+            LaunchedEffect(draft.index, draft.currentPersonId) { if (viewModel.advanceDraft()) finish() }
         } else {
-            val date = LocalDate.ofEpochDay(sessionDate)
-            val dateTo = LocalDate.ofEpochDay(sessionDateTo)
+            val date = LocalDate.ofEpochDay(draft.fromEpoch)
+            val dateTo = LocalDate.ofEpochDay(draft.toEpoch)
             val existing = evaluations.firstOrNull {
-                it.personId == person.id && it.evaluatorId == sessionEvaluator && it.date == date && it.dateTo == dateTo
+                it.personId == person.id && it.evaluatorId == draft.evaluatorId && it.date == date && it.dateTo == dateTo
             }
-            val evaluatorName = people.firstOrNull { it.id == sessionEvaluator }?.name ?: existing?.evaluatorName ?: ""
+            val previous = remember(evaluations, person.id, draft.evaluatorId, date) {
+                previousEvaluation(evaluations, person.id, draft.evaluatorId, date)
+            }
+            val evaluatorName = people.firstOrNull { it.id == draft.evaluatorId }?.name ?: existing?.evaluatorName ?: ""
+            val start = draft.typedScores(EvaluationItems.count)?.joinToString("")
+                ?: existing?.scores?.joinToString("")
+                ?: "0".repeat(EvaluationItems.count)
             EvaluationFormDialog(
                 personName = person.name,
                 evaluatorName = evaluatorName,
-                position = queueIndex + 1,
-                total = queue.size,
+                position = draft.index + 1,
+                total = draft.personIds.size,
                 date = date,
                 dateTo = dateTo,
-                key = person.id + sessionEvaluator + sessionDate + "-" + sessionDateTo,
-                initialScores = existing?.scores?.joinToString("") ?: "0".repeat(EvaluationItems.count),
-                onCancel = { queueText = ""; queueIndex = 0 },
+                key = person.id + draft.evaluatorId + draft.fromEpoch + "-" + draft.toEpoch,
+                initialScores = start,
+                previous = previous,
+                onScoresChange = { viewModel.updateDraftScores(it) },
+                // Closing only pauses: the round stays and is continued from the card on top.
+                onCancel = { formOpen = false },
                 onSave = { scores ->
                     viewModel.saveEvaluation(
                         EvaluationEntry(
                             id = existing?.id ?: UUID.randomUUID().toString(),
                             personId = person.id,
                             personName = person.name,
-                            evaluatorId = sessionEvaluator,
+                            evaluatorId = draft.evaluatorId,
                             evaluatorName = evaluatorName,
                             date = date,
                             dateTo = dateTo,
                             scores = scores
                         )
                     )
-                    advance()
+                    if (viewModel.advanceDraft()) finish()
                 }
             )
         }
@@ -219,26 +237,36 @@ fun EvaluationScreen(viewModel: PeopleViewModel) {
                 detailId = null
                 startSession(detail.evaluatorId, listOf(detail.personId), detail.date.toEpochDay(), detail.dateTo.toEpochDay())
             },
-            onDelete = { deletingId = detail.id; detailId = null },
+            // Deleted at once; the snackbar offers «بازگرداندن».
+            onDelete = { viewModel.deleteEvaluation(detail.id); detailId = null },
             onDismiss = { detailId = null }
         )
     }
-    val deleting = deletingId?.let { id -> evaluations.firstOrNull { it.id == id } }
-    if (deleting != null) {
-        AlertDialog(
-            onDismissRequest = { deletingId = null },
-            title = { Text("حذف ارزیابی", fontWeight = FontWeight.Bold) },
-            text = {
-                val name = people.firstOrNull { it.id == deleting.personId }?.name ?: deleting.personName
-                Text("ارزیابی «$name» (${deleting.periodText()}) حذف شود؟ این کار قابل بازگشت نیست.")
-            },
-            confirmButton = {
-                TextButton(onClick = { viewModel.deleteEvaluation(deleting.id); deletingId = null }) {
-                    Text("حذف", color = Color.Red, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = { TextButton(onClick = { deletingId = null }) { Text("انصراف") } }
-        )
+}
+
+/** «ادامهٔ ارزیابی ناتمام»: shown on top while a round is saved on the phone. */
+@Composable
+private fun ResumeCard(draft: WorkingDraft, personName: String, onResume: () -> Unit, onDiscard: () -> Unit) {
+    val typed = draft.typedScores(EvaluationItems.count)?.count { it > 0 }
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Purple.copy(alpha = .10f)),
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onResume)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("ادامهٔ ارزیابی ناتمام", fontWeight = FontWeight.Bold, color = Navy, style = MaterialTheme.typography.titleMedium)
+            Text(
+                (if (personName.isNotBlank()) "$personName • " else "") +
+                    (if (typed != null) "${typed.toPersian()} از ${EvaluationItems.count.toPersian()} آیتم • " else "") +
+                    "${draft.remaining.toPersian()} نفر مانده • ${periodText(LocalDate.ofEpochDay(draft.fromEpoch), LocalDate.ofEpochDay(draft.toEpoch))}",
+                color = Color.DarkGray,
+                style = MaterialTheme.typography.bodySmall
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onResume, modifier = Modifier.weight(1f)) { Text("ادامه") }
+                OutlinedButton(onClick = onDiscard, modifier = Modifier.weight(1f)) { Text("کنار گذاشتن") }
+            }
+        }
     }
 }
 
@@ -278,7 +306,7 @@ private fun NewEvaluationSection(
         it.personId == p.id && it.evaluatorId == evaluatorId && it.date == fromDate && it.dateTo == toDate
     }
 
-    StepBox(1, "چه کسی ارزیابی می‌کند؟", "ارزیاب را انتخاب کنید و بازهٔ زمانی (دورهٔ) ارزیابی را مشخص کنید.", true) {
+    StepBox(1, "چه کسی ارزیابی می‌کند؟", "", true) {
         if (people.none { it.active }) {
             Text(
                 "ابتدا در بخش «نیروها» افراد را ثبت کنید.",
@@ -287,7 +315,7 @@ private fun NewEvaluationSection(
             )
         } else {
             PersonSearchField(
-                label = "ارزیاب (همهٔ نیروها می‌توانند ارزیابی کنند)",
+                label = "ارزیاب",
                 options = evaluatorOptions,
                 selectedId = evaluatorId,
                 onSelect = { evaluatorId = it }
@@ -300,17 +328,12 @@ private fun NewEvaluationSection(
                     Text("تا: ${JalaliDate.from(toDate).display()}")
                 }
             }
-            Text(
-                "دورهٔ ارزیابی: ${periodText(fromDate, toDate)}",
-                color = Color.Gray,
-                style = MaterialTheme.typography.bodySmall
-            )
         }
     }
 
     StepBox(
         2, "چه کسانی ارزیابی شوند؟",
-        "نفرات را تیک بزنید. با تیک نام سرشیفت، همهٔ زیرمجموعه‌های او هم انتخاب می‌شوند و می‌توانید تکی برشان دارید.",
+        "با تیک نام سرشیفت، همهٔ زیرمجموعه‌های او هم انتخاب می‌شوند و می‌توانید تکی برشان دارید.",
         evaluator != null
     ) {
         OutlinedTextField(
@@ -318,7 +341,7 @@ private fun NewEvaluationSection(
             label = { Text("جستجوی نام") }, singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
-        Row {
+        Row(Modifier.horizontalScroll(rememberScrollState())) {
             TextButton(onClick = { selectedText = (selected + shown.map { it.id }).joinToString(",") }) { Text("همهٔ نتایج") }
             TextButton(onClick = {
                 selectedText = candidates.filter { draftOf(it)?.isComplete == false }.joinToString(",") { it.id }
@@ -425,7 +448,7 @@ private fun StepBox(number: Int, title: String, hint: String, enabled: Boolean, 
                     style = MaterialTheme.typography.titleMedium
                 )
             }
-            Text(hint, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+            if (hint.isNotBlank()) Text(hint, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
             if (enabled) content()
         }
     }
@@ -466,6 +489,28 @@ private fun numberedLabels(names: List<String>): List<String> {
 // ============================================================ scoring form
 
 @Composable
+private fun ScoreButtons(selected: Int, onPick: (Int) -> Unit, modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (value in EvaluationItems.MIN_SCORE..EvaluationItems.MAX_SCORE) {
+            val on = selected == value
+            Surface(
+                color = if (on) scoreColor(value) else Color(0xFFF1EFFB),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).clickable { onPick(value) }
+            ) {
+                Text(
+                    value.toPersian(),
+                    Modifier.padding(vertical = 10.dp).fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    color = if (on) Color.White else Navy,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun EvaluationFormDialog(
     personName: String,
     evaluatorName: String,
@@ -475,112 +520,171 @@ private fun EvaluationFormDialog(
     dateTo: LocalDate,
     key: String,
     initialScores: String,
+    previous: EvaluationEntry?,
+    onScoresChange: (String) -> Unit,
     onCancel: () -> Unit,
     onSave: (List<Int>) -> Unit
 ) {
     val count = EvaluationItems.count
     // One character per item: '0' = not scored yet, '1'..'5' = the score.
     var scoreText by rememberSaveable(key) { mutableStateOf(initialScores.padEnd(count, '0').take(count)) }
+    // The item being scored now; after each tap the list moves on to the next one.
+    var focus by rememberSaveable(key) { mutableStateOf(scoreText.indexOf('0').coerceAtLeast(0)) }
+    var fillValue by rememberSaveable { mutableStateOf(4) }
+    var pendingText by remember { mutableStateOf<String?>(null) } // new scores waiting for the OK to replace the old ones
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+
     val scores = scoreText.map { it - '0' }
     val done = scores.count { it > 0 }
     val complete = done == count
     val sum = scores.sum()
 
+    // Reopening a half-scored form: start at the item that is next.
+    LaunchedEffect(key) { if (focus > 0) listState.scrollToItem(focus + 1) }
+
+    fun change(text: String) {
+        scoreText = text
+        onScoresChange(text)
+    }
+
+    // Replacing already given scores (fill all / copy) asks first; filling an empty form does not.
+    fun replaceAll(text: String) {
+        if (done > 0 && text != scoreText) {
+            pendingText = text
+        } else {
+            change(text)
+            focus = 0
+            scope.launch { listState.animateScrollToItem(1) }
+        }
+    }
+
     // Drawn inside the app's content area (between the header and the bottom bar), not in a separate window,
     // so the buttons are always above the phone's own navigation buttons.
     BackHandler(onBack = onCancel)
-    run {
-        Surface(Modifier.fillMaxSize(), color = AppBackground) {
-            Column(Modifier.fillMaxSize()) {
-                Column(
-                    Modifier.fillMaxWidth().background(Navy).padding(horizontal = 18.dp, vertical = 12.dp)
-                ) {
-                    Text(personName, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+    Surface(Modifier.fillMaxSize(), color = AppBackground) {
+        Column(Modifier.fillMaxSize()) {
+            // ----- fixed header with the progress («۱۲ از ۲۳»)
+            Column(
+                Modifier.fillMaxWidth().background(Navy).padding(horizontal = 18.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(personName, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "نفر ${position.toPersian()} از ${total.toPersian()} • دوره: ${periodText(date, dateTo)}" +
+                        if (evaluatorName.isNotBlank()) " • ارزیاب: $evaluatorName" else "",
+                    color = Color(0xFFDAD9FF),
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "نفر ${position.toPersian()} از ${total.toPersian()} • دوره: ${periodText(date, dateTo)}" +
-                            if (evaluatorName.isNotBlank()) " • ارزیاب: $evaluatorName" else "",
-                        color = Color(0xFFDAD9FF),
-                        style = MaterialTheme.typography.bodySmall
+                        "${done.toPersian()} از ${count.toPersian()}",
+                        Modifier.padding(end = 10.dp),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
                     )
-                    Text(
-                        "برای هر آیتم از ۱ (کمترین) تا ۵ (بیشترین) نمره بدهید. اگر وقت نداشتید، «ذخیرهٔ ناتمام» را بزنید و بعداً ادامه دهید.",
-                        color = Color(0xFFDAD9FF),
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Box(Modifier.weight(1f)) { ScoreBar(done.toDouble() / count, Color(0xFF7CB342), 8) }
                 }
-                Column(
-                    Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    EvaluationItems.all.forEachIndexed { i, title ->
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            shape = RoundedCornerShape(14.dp)
-                        ) {
-                            Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("${(i + 1).toPersian()}. $title", fontWeight = FontWeight.Bold, color = Navy)
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    for (value in EvaluationItems.MIN_SCORE..EvaluationItems.MAX_SCORE) {
-                                        val on = scores[i] == value
-                                        Surface(
-                                            color = if (on) scoreColor(value) else Color(0xFFF1EFFB),
-                                            shape = RoundedCornerShape(10.dp),
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .clickable {
-                                                    scoreText = scoreText.substring(0, i) + value + scoreText.substring(i + 1)
-                                                }
-                                        ) {
-                                            Text(
-                                                value.toPersian(),
-                                                Modifier.padding(vertical = 9.dp).fillMaxWidth(),
-                                                textAlign = TextAlign.Center,
-                                                color = if (on) Color.White else Navy,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
-                                }
-                            }
+                Text(
+                    "اگر وقت نداشتید، «ذخیرهٔ ناتمام» را بزنید و بعداً ادامه دهید.",
+                    color = Color(0xFFDAD9FF),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            LazyColumn(
+                Modifier.weight(1f).fillMaxWidth(),
+                state = listState,
+                contentPadding = PaddingValues(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // ----- quick fill and copy
+                item {
+                    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(14.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("همهٔ آیتم‌ها =", fontWeight = FontWeight.Bold, color = Navy)
+                            ScoreButtons(fillValue, { fillValue = it })
+                            Button(
+                                onClick = { replaceAll(fillValue.toString().repeat(count)) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("پر کردن همه با ${fillValue.toPersian()}") }
+                            OutlinedButton(
+                                onClick = { previous?.let { replaceAll(it.scores.joinToString("")) } },
+                                enabled = previous != null,
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text(if (previous != null) "کپی از دورهٔ قبل (${periodText(previous.date, previous.dateTo)})" else "دورهٔ قبلی برای کپی نیست") }
                         }
                     }
                 }
-                Surface(color = Color.White, shadowElevation = 8.dp) {
-                    Column(
-                        Modifier.fillMaxWidth().padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                itemsIndexed(EvaluationItems.all) { i, title ->
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(14.dp),
+                        border = if (i == focus) BorderStroke(2.dp, Purple) else null
                     ) {
-                        if (complete) {
-                            val final = Evaluations.finalScore(sum)
-                            Text(
-                                "جمع: ${sum.toPersian()} از ${EvaluationItems.maxTotal.toPersian()} • نمرهٔ نهایی: " +
-                                    "${formatScore(final)} از ${EvaluationItems.FINAL_MAX.toPersian()}",
-                                fontWeight = FontWeight.Bold,
-                                color = levelColor(Evaluations.levelOf(final))
-                            )
-                        } else {
-                            Text(
-                                "${done.toPersian()} از ${count.toPersian()} آیتم نمره گرفته است؛ ${(count - done).toPersian()} آیتم مانده.",
-                                color = Color.DarkGray,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                        Button(onClick = { onSave(scores) }, enabled = complete, modifier = Modifier.fillMaxWidth()) {
-                            Text(if (position < total) "ذخیره و نفر بعدی" else "ذخیره و پایان")
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(
-                                onClick = { onSave(scores) },
-                                enabled = done > 0 && !complete,
-                                modifier = Modifier.weight(1f)
-                            ) { Text("ذخیرهٔ ناتمام") }
-                            TextButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("انصراف") }
+                        Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("${(i + 1).toPersian()}. $title", fontWeight = FontWeight.Bold, color = Navy)
+                            ScoreButtons(scores[i], { value ->
+                                change(setScoreAt(scoreText, i, value))
+                                // On to the next item.
+                                focus = nextFocus(i, count)
+                                scope.launch { listState.animateScrollToItem(focus + 1) }
+                            })
                         }
                     }
                 }
             }
+
+            // ----- bottom bar: never taller than a part of the screen, scrolls if the text is large
+            Surface(color = Color.White, shadowElevation = 8.dp) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 300.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (complete) {
+                        val final = Evaluations.finalScore(sum)
+                        Text(
+                            "جمع: ${sum.toPersian()} از ${EvaluationItems.maxTotal.toPersian()} • نمرهٔ نهایی: " +
+                                "${formatScore(final)} از ${EvaluationItems.FINAL_MAX.toPersian()}",
+                            fontWeight = FontWeight.Bold,
+                            color = levelColor(Evaluations.levelOf(final))
+                        )
+                    }
+                    Button(onClick = { onSave(scores) }, enabled = complete, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (position < total) "ذخیره و نفر بعدی" else "ذخیره و پایان")
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { onSave(scores) },
+                            enabled = done > 0 && !complete,
+                            modifier = Modifier.weight(1f)
+                        ) { Text("ذخیرهٔ ناتمام") }
+                        TextButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("بستن") }
+                    }
+                }
+            }
         }
+    }
+
+    pendingText?.let { text ->
+        AlertDialog(
+            onDismissRequest = { pendingText = null },
+            title = { Text("جایگزینی نمره‌ها", fontWeight = FontWeight.Bold) },
+            text = { ScrollText("نمرهٔ ${done.toPersian()} آیتم که تا اینجا داده‌اید با نمره‌های تازه جایگزین می‌شود. ادامه می‌دهید؟") },
+            confirmButton = {
+                TextButton(onClick = {
+                    change(text)
+                    focus = 0
+                    scope.launch { listState.animateScrollToItem(1) }
+                    pendingText = null
+                }) { Text("جایگزین کن", fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { pendingText = null }) { Text("انصراف") } }
+        )
     }
 }
 
@@ -624,7 +728,7 @@ private fun ResultsSection(
 
     // ----- send / receive (evaluations only; staff and reports have their own send buttons)
     ExchangeBar(
-        hint = "ارسال، ارزیابی‌های فهرست پایین (با فیلتر فعلی، مثلاً فقط یک دورهٔ ارزیابی) را به‌صورت فایل می‌فرستد. " +
+        help = "ارسال، ارزیابی‌های فهرست پایین (با فیلتر فعلی، مثلاً فقط یک دورهٔ ارزیابی) را به‌صورت فایل می‌فرستد. " +
             "گیرنده با «دریافت از فایل» آن‌ها را به ارزیابی‌های خودش اضافه (ادغام) می‌کند؛ هیچ ارزیابی قبلی حذف نمی‌شود.",
         sendLabel = if (periodFilter.isBlank()) "ارسال همه (${filtered.size.toPersian()})" else "ارسال این دوره (${filtered.size.toPersian()})",
         sendEnabled = filtered.isNotEmpty(),
@@ -754,7 +858,6 @@ private fun ResultsSection(
                         )
                     }
                 }
-                Text("برای دیدن ارزیابی‌های یک نفر، روی نامش بزنید.", color = Color.Gray, style = MaterialTheme.typography.labelSmall)
             }
         }
     }
@@ -793,7 +896,7 @@ private fun ResultsSection(
                 }
                 ScoreBar(e.finalScore / EvaluationItems.FINAL_MAX, levelColor(lvl), 8)
                 Text(
-                    "${lvl.title} • جمع ${e.total.toPersian()} از ${EvaluationItems.maxTotal.toPersian()} • برای دیدن جدول بزنید",
+                    "${lvl.title} • جمع ${e.total.toPersian()} از ${EvaluationItems.maxTotal.toPersian()}",
                     color = Color.Gray,
                     style = MaterialTheme.typography.labelSmall
                 )

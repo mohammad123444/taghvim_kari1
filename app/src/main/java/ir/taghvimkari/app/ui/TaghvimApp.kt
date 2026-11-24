@@ -12,6 +12,7 @@ import ir.taghvimkari.app.data.DataExchange
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,7 +32,18 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Button
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.LaunchedEffect
+import ir.taghvimkari.app.domain.daysSinceBackup
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -45,10 +57,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import ir.taghvimkari.app.BuildConfig
 import ir.taghvimkari.app.domain.Person
 import ir.taghvimkari.app.domain.toPersian
-import ir.taghvimkari.app.domain.toPersianDigits
+import java.time.LocalDate
 
 @Composable
 fun TaghvimApp(viewModel: PeopleViewModel) {
@@ -56,7 +67,6 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
     // Settings is opened from the gear in the header; this remembers where to return to.
     var pageBeforeSettings by rememberSaveable { mutableStateOf(0) }
     var showAdd by rememberSaveable { mutableStateOf(false) }
-    var pendingDelete by remember { mutableStateOf<Person?>(null) }
     var editing by remember { mutableStateOf<Person?>(null) }
     var peopleSendFailed by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
@@ -66,11 +76,29 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
     // While the keyboard is open the bottom bar is hidden and the content ends right above the keyboard,
     // so text boxes and their buttons are never covered by the keyboard or the phone's navigation buttons.
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val snackbarHost = remember { SnackbarHostState() }
+    var backupFailed by rememberSaveable { mutableStateOf(false) }
+
+    // Every deletion (staff, report, evaluation) can be taken back from the snackbar.
+    val undo = viewModel.undo
+    LaunchedEffect(undo?.id) {
+        if (undo != null) {
+            val result = snackbarHost.showSnackbar(
+                message = undo.message,
+                actionLabel = "بازگرداندن",
+                withDismissAction = true,
+                duration = SnackbarDuration.Long
+            )
+            if (result == SnackbarResult.ActionPerformed) undo.restore()
+            viewModel.clearUndo(undo.id)
+        }
+    }
 
     Scaffold(
         containerColor = AppBackground,
         topBar = {
             AppHeader(
+                title = PAGE_TITLES.getOrElse(page) { "" },
                 settingsOpen = page == PAGE_SETTINGS,
                 onSettings = {
                     if (page == PAGE_SETTINGS) {
@@ -82,9 +110,20 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
                 }
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHost) },
         bottomBar = { if (!imeVisible) AppNavigation(selected = page, onSelect = { page = it }) }
     ) { inner ->
-        Box(Modifier.padding(inner).fillMaxSize().imePadding()) {
+        Column(Modifier.padding(inner).fillMaxSize().imePadding()) {
+            // Monthly backup reminder. Not shown while scoring an evaluation, so it never gets in the way there.
+            if (viewModel.backupReminderVisible && page != PAGE_EVALUATION) {
+                BackupReminderCard(
+                    days = daysSinceBackup(LocalDate.now().toEpochDay(), viewModel.lastBackup),
+                    failed = backupFailed,
+                    onSend = { backupFailed = !viewModel.sendBackup(context) },
+                    onLater = viewModel::snoozeBackupReminder
+                )
+            }
+            Box(Modifier.weight(1f).fillMaxWidth()) {
             when (page) {
                 0 -> DashboardScreen(viewModel.people)
                 1 -> PeopleScreen(
@@ -99,6 +138,7 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
                 3 -> ReportsScreen(viewModel)
                 PAGE_EVALUATION -> EvaluationScreen(viewModel)
                 else -> SettingsScreen(viewModel)
+            }
             }
         }
     }
@@ -116,7 +156,7 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
         AddPersonDialog(
             initial = person,
             memberCount = viewModel.people.count { it.leaderId == person.id },
-            onDelete = { editing = null; pendingDelete = person },
+            onDelete = { editing = null; viewModel.remove(person.id) },
             onDismiss = { editing = null },
             onSave = { head, members, apply -> viewModel.update(head, members, apply); editing = null }
         )
@@ -133,7 +173,7 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
             onDismissRequest = viewModel::cancelImport,
             title = { Text("دریافت اطلاعات نیروها", fontWeight = FontWeight.Bold) },
             text = {
-                Text(
+                ScrollText(
                     "در فایل دریافتی ${incoming.people.size.toPersian()} نفر هست. فهرست نیروهای فعلی این گوشی " +
                         "(${viewModel.people.size.toPersian()} نفر) کاملاً با آن جایگزین می‌شود." +
                         (if (incoming.reports != null || incoming.evaluations != null) {
@@ -153,7 +193,7 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
             onDismissRequest = viewModel::cancelReportImport,
             title = { Text("دریافت گزارش‌ها", fontWeight = FontWeight.Bold) },
             text = {
-                Text(
+                ScrollText(
                     "در فایل دریافتی ${incoming.size.toPersian()} گزارش هست: " +
                         "${merge.added.toPersian()} مورد جدید، ${merge.updated.toPersian()} مورد به‌روزشده و " +
                         "${merge.unchanged.toPersian()} مورد بدون تغییر. " +
@@ -171,7 +211,7 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
             onDismissRequest = viewModel::cancelEvaluationImport,
             title = { Text("دریافت ارزیابی‌ها", fontWeight = FontWeight.Bold) },
             text = {
-                Text(
+                ScrollText(
                     "در فایل دریافتی ${incoming.size.toPersian()} ارزیابی هست: " +
                         "${merge.added.toPersian()} مورد جدید، ${merge.updated.toPersian()} مورد به‌روزشده و " +
                         "${merge.unchanged.toPersian()} مورد بدون تغییر. " +
@@ -187,28 +227,8 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
         AlertDialog(
             onDismissRequest = viewModel::dismissImportError,
             title = { Text("فایل پذیرفته نشد", fontWeight = FontWeight.Bold) },
-            text = { Text(message) },
+            text = { ScrollText(message) },
             confirmButton = { TextButton(onClick = viewModel::dismissImportError) { Text("باشه") } }
-        )
-    }
-
-    pendingDelete?.let { person ->
-        AlertDialog(
-            onDismissRequest = { pendingDelete = null },
-            title = { Text("حذف نیرو", fontWeight = FontWeight.Bold) },
-            text = {
-                val members = viewModel.people.count { it.leaderId == person.id }
-                Text(
-                    "«${person.name}» حذف شود؟ این کار قابل بازگشت نیست." +
-                        if (person.isLeader && members > 0) " زیرمجموعه‌های او حذف نمی‌شوند." else ""
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { viewModel.remove(person.id); pendingDelete = null }) {
-                    Text("حذف", color = Color.Red)
-                }
-            },
-            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("انصراف") } }
         )
     }
 }
@@ -216,24 +236,27 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
 private const val PAGE_EVALUATION = 4
 private const val PAGE_SETTINGS = 5
 
+/** The blue header shows the title of the current page (indexes as in the bottom bar; 5 = settings). */
+private val PAGE_TITLES = listOf("تقویم", "مدیریت نیروها", "مقایسه", "گزارش تشویق و تنبیه", "ارزیابی نیروها", "تنظیمات")
+
 @Composable
-private fun AppHeader(settingsOpen: Boolean, onSettings: () -> Unit) {
+private fun AppHeader(title: String, settingsOpen: Boolean, onSettings: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
             .background(Navy)
             .statusBarsPadding()
-            .padding(start = 18.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+            .padding(start = 18.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(Modifier.weight(1f)) {
-            Text("تقویم کاری", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text(
-                "مدیریت نیروها و شیفت‌ها • نسخه ${BuildConfig.VERSION_NAME.toPersianDigits()}",
-                color = Color(0xFFDAD9FF),
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
+        Text(
+            title,
+            Modifier.weight(1f),
+            color = Color.White,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1
+        )
         IconButton(onClick = onSettings, modifier = Modifier.size(48.dp)) {
             Icon(
                 Icons.Default.Settings,
@@ -245,28 +268,51 @@ private fun AppHeader(settingsOpen: Boolean, onSettings: () -> Unit) {
     }
 }
 
+/** «یادآوری پشتیبان‌گیری»: closable, comes back after a few days if no backup was sent. */
+@Composable
+private fun BackupReminderCard(days: Long?, failed: Boolean, onSend: () -> Unit, onLater: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF4DC)),
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                if (days == null) "هنوز از اطلاعات پشتیبان نگرفته‌اید." else "${days.toInt().toPersian()} روز از آخرین پشتیبان‌گیری گذشته است.",
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF7A4B00)
+            )
+            if (failed) Text("ارسال انجام نشد.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onSend, modifier = Modifier.weight(1f)) { Text("ارسال پشتیبان") }
+                OutlinedButton(onClick = onLater, modifier = Modifier.weight(1f)) { Text("بعداً") }
+            }
+        }
+    }
+}
+
 @Composable
 private fun AppNavigation(selected: Int, onSelect: (Int) -> Unit) {
     NavigationBar(containerColor = Color.White) {
         NavigationBarItem(
             selected = selected == 0, onClick = { onSelect(0) },
-            icon = { Icon(Icons.Default.DateRange, contentDescription = null) }, label = { Text("تقویم") }
+            icon = { Icon(Icons.Default.DateRange, contentDescription = null) }, label = { Text("تقویم", maxLines = 1) }
         )
         NavigationBarItem(
             selected = selected == 1, onClick = { onSelect(1) },
-            icon = { Icon(Icons.Default.Person, contentDescription = null) }, label = { Text("نیروها") }
+            icon = { Icon(Icons.Default.Person, contentDescription = null) }, label = { Text("نیروها", maxLines = 1) }
         )
         NavigationBarItem(
             selected = selected == 2, onClick = { onSelect(2) },
-            icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) }, label = { Text("مقایسه") }
+            icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) }, label = { Text("مقایسه", maxLines = 1) }
         )
         NavigationBarItem(
             selected = selected == 3, onClick = { onSelect(3) },
-            icon = { Icon(Icons.Default.Edit, contentDescription = null) }, label = { Text("گزارش") }
+            icon = { Icon(Icons.Default.Edit, contentDescription = null) }, label = { Text("گزارش", maxLines = 1) }
         )
         NavigationBarItem(
             selected = selected == PAGE_EVALUATION, onClick = { onSelect(PAGE_EVALUATION) },
-            icon = { Icon(Icons.Default.Star, contentDescription = null) }, label = { Text("ارزیابی") }
+            icon = { Icon(Icons.Default.Star, contentDescription = null) }, label = { Text("ارزیابی", maxLines = 1) }
         )
     }
 }

@@ -39,6 +39,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.sp
 import ir.taghvimkari.app.domain.Holidays
 import ir.taghvimkari.app.domain.JalaliDate
@@ -138,7 +139,7 @@ fun JalaliMonthCalendar(
                 for (c in 0 until 7) {
                     val day = r * 7 + c - offset + 1
                     if (day !in 1..length) {
-                        Box(Modifier.weight(1f).height(CELL_HEIGHT))
+                        Box(Modifier.weight(1f).height(cellHeight()))
                     } else {
                         val date = JalaliDate(year, month, day).toLocalDate()
                         DayCell(
@@ -196,6 +197,10 @@ private const val SWIPE_THRESHOLD = 120f
 
 private val CELL_HEIGHT = 62.dp
 
+/** The day cells grow with the text size (phone setting × the app's text-size choice). */
+@Composable
+private fun cellHeight(): androidx.compose.ui.unit.Dp = CELL_HEIGHT * LocalDensity.current.fontScale.coerceIn(1f, 1.6f)
+
 @Composable
 private fun DayCell(
     day: Int,
@@ -216,7 +221,7 @@ private fun DayCell(
     Box(
         modifier
             .padding(2.dp)
-            .height(CELL_HEIGHT - 4.dp)
+            .height(cellHeight() - 4.dp)
             .clip(shape)
             .background(if (isSelected) Purple else Color(0xFFF1EFFB))
             .then(if (isToday && !isSelected) Modifier.border(BorderStroke(1.5.dp, Purple), shape) else Modifier)

@@ -57,22 +57,16 @@ fun PeopleScreen(
         .sortedByTeam(leaderNames) { it }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "مدیریت نیروها",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = Navy,
-                modifier = Modifier.weight(1f)
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.weight(1f),
+                label = { Text("جستجو بر اساس نام") },
+                singleLine = true
             )
+            HelpTip("برای ثبت نیروی تازه، دکمهٔ + را بزنید. برای ویرایش یا حذف، روی هر نفر بزنید.")
             FilledIconButton(onClick = onAdd) { Icon(Icons.Default.Add, contentDescription = "افزودن نیرو") }
         }
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("جستجو بر اساس نام") },
-            singleLine = true
-        )
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton(onClick = { showPicker = true }, modifier = Modifier.weight(1f)) {
                 Text("وضعیت در تاریخ: ${JalaliDate.from(date).display()}")
@@ -88,12 +82,12 @@ fun PeopleScreen(
             modifier = Modifier.padding(horizontal = 4.dp)
         )
         Spacer(Modifier.height(8.dp))
-        if (filtered.isEmpty()) EmptyMessage("نیرویی پیدا نشد. برای ثبت نیرو، دکمه + را بزنید. برای ویرایش یا حذف، روی هر نفر بزنید.")
+        if (filtered.isEmpty()) EmptyMessage("نیرویی پیدا نشد.")
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item {
                 ExchangeBar(
-                    hint = "فقط اطلاعات ثبت نیروها (نیروها، سرشیفت‌ها و زیرمجموعه‌ها) ارسال می‌شود؛ ارزیابی و گزارش‌ها جدا و از بخش خودشان ارسال می‌شوند. " +
-                        "اطلاعات دریافتی، پس از تأیید، جایگزین فهرست نیروهای این گوشی می‌شود.",
+                    warning = "اطلاعات دریافتی، پس از تأیید، جایگزین فهرست نیروهای این گوشی می‌شود.",
+                    help = "فقط اطلاعات ثبت نیروها (نیروها، سرشیفت‌ها و زیرمجموعه‌ها) ارسال می‌شود؛ ارزیابی و گزارش‌ها جدا و از بخش خودشان ارسال می‌شوند.",
                     sendLabel = "ارسال اطلاعات نیروها",
                     sendEnabled = people.isNotEmpty(),
                     sendFailed = sendFailed,
