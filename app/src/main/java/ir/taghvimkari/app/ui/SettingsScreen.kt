@@ -50,14 +50,19 @@ fun SettingsScreen(viewModel: PeopleViewModel) {
     val checking = viewModel.updateUi is UpdateUi.Checking
     var backupFailed by rememberSaveable { mutableStateOf(false) }
 
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) viewModel.offerImport(uri)
-    }
-
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        SettingsCard(
+            "اطلاعات ذخیره‌شده"
+        ) {
+            Text("نیروهای ثبت‌شده: ${people.size.toPersian()} نفر")
+            Text("سرشیفت‌ها: ${people.count { it.isLeader }.toPersian()} نفر")
+            Text("گزارش‌های تشویق و تنبیه: ${viewModel.reports.size.toPersian()} مورد")
+            Text("ارزیابی‌ها: ${viewModel.evaluations.size.toPersian()} مورد")
+        }
+
         SettingsCard("اندازهٔ نوشته") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 TextSize.entries.forEach { size ->
@@ -93,23 +98,6 @@ fun SettingsScreen(viewModel: PeopleViewModel) {
             ) { Text("ارسال") }
             if (backupFailed) {
                 Text("ارسال انجام نشد.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-
-        SettingsCard(
-            "اطلاعات ذخیره‌شده"
-        ) {
-            Text("نیروهای ثبت‌شده: ${people.size.toPersian()} نفر")
-            Text("سرشیفت‌ها: ${people.count { it.isLeader }.toPersian()} نفر")
-            Text("گزارش‌های تشویق و تنبیه: ${viewModel.reports.size.toPersian()} مورد")
-            Text("ارزیابی‌ها: ${viewModel.evaluations.size.toPersian()} مورد")
-        }
-
-        SettingsCard(
-            "دریافت اطلاعات"
-        ) {
-            OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth()) {
-                Text("دریافت")
             }
         }
 

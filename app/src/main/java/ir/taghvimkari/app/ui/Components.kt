@@ -5,13 +5,17 @@ import android.view.WindowManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -195,6 +199,12 @@ fun FormDialog(
     dismissButton: @Composable () -> Unit = {},
     content: @Composable ColumnScope.() -> Unit
 ) {
+    // The dialog's own window may report no system-bar insets (edge-to-edge, targetSdk 35), which put the
+    // buttons under the phone's navigation bar. So the bar sizes are read here, from the app window, and
+    // applied as fixed padding; the keyboard still pushes the dialog up through the ime inset.
+    val bars = WindowInsets.systemBars
+    val density = LocalDensity.current
+    val barInsets = WindowInsets(0, bars.getTop(density), 0, bars.getBottom(density))
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
@@ -204,8 +214,7 @@ fun FormDialog(
         Box(
             Modifier
                 .fillMaxSize()
-                .systemBarsPadding()
-                .imePadding()
+                .windowInsetsPadding(barInsets.union(WindowInsets.ime))
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             contentAlignment = Alignment.Center
         ) {
