@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.TaghvimKari" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/app_background</item>
+    </style>
+    <color name="app_background">#FFF6F5FC</color>
+    <color name="ic_launcher_background">#FF24245B</color>
+</resources>

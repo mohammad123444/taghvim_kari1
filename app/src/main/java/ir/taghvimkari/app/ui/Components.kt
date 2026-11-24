@@ -1,0 +1,256 @@
+package ir.taghvimkari.app.ui
+
+import androidx.compose.foundation.clickable
+import android.view.WindowManager
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import ir.taghvimkari.app.domain.Employment
+import ir.taghvimkari.app.domain.JalaliDate
+import ir.taghvimkari.app.domain.Person
+import ir.taghvimkari.app.domain.DayStatus
+import ir.taghvimkari.app.domain.bucketOf
+import ir.taghvimkari.app.domain.toPersian
+
+@Composable
+fun EmptyMessage(text: String) {
+    Text(
+        text,
+        modifier = Modifier.fillMaxWidth().padding(18.dp),
+        textAlign = TextAlign.Center,
+        color = Color.Gray
+    )
+}
+
+@Composable
+fun FilterDropdown(label: String, options: List<String>, value: String, onChange: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("$label: $value")
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    onClick = { onChange(option); expanded = false }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun PersonCard(person: Person, status: DayStatus? = null, leaderName: String? = null, onClick: (() -> Unit)? = null) {
+    val employmentColor = when (person.employment) {
+        Employment.OFFICIAL -> Blue
+        Employment.CONTRACTUAL -> Green
+        Employment.CONTRACTOR -> Orange
+    }
+    Card(
+        modifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (person.isLeader) "${person.name} • سرشیفت" else person.name,
+                        fontWeight = FontWeight.Bold,
+                        color = Navy
+                    )
+                    if (leaderName != null) {
+                        Text("زیرمجموعهٔ $leaderName", style = MaterialTheme.typography.bodySmall, color = Purple)
+                    }
+                    Text(
+                        person.pattern.title,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.DarkGray
+                    )
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Surface(color = employmentColor.copy(alpha = .13f), shape = RoundedCornerShape(8.dp)) {
+                        Text(
+                            person.employment.title,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            color = employmentColor,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Surface(color = Purple.copy(alpha = .10f), shape = RoundedCornerShape(8.dp)) {
+                        Text(
+                            person.category.title,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            color = Purple,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+            if (status != null) {
+                val bucket = bucketOf(person, status)
+                Spacer(Modifier.height(8.dp))
+                // Label, shift and counts together in one box at the bottom of the card.
+                Surface(color = Color(0xFFF1EFFB), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "وضعیت کاری در این تاریخ:",
+                                Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.DarkGray
+                            )
+                            Text(
+                                bucket.title,
+                                color = if (bucket.working) Green else Color.DarkGray,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        Text(
+                            statusLine(status),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.DarkGray
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** One-line Persian summary of a [DayStatus]: how long the current work/rest stretch has lasted and how long remains. */
+fun statusLine(status: DayStatus): String {
+    val left = status.remainingDays
+    return when {
+        // Today counts as a day that has passed: day 10 of 14 -> "10 passed, 4 left".
+        !status.started -> "${left.toPersian()} روز استراحت مانده"
+        status.working -> "${status.elapsedDays.toPersian()} روز از کار گذشته • " +
+            if (left > 0) "${left.toPersian()} روز کار مانده" else "امروز آخرین روز کار است"
+        else -> "${status.elapsedDays.toPersian()} روز از استراحت گذشته • " +
+            if (left > 0) "${left.toPersian()} روز استراحت مانده" else "امروز آخرین روز استراحت است"
+    }
+}
+
+/**
+ * A dialog with text boxes / buttons that always stays above the on-screen keyboard and the phone's own
+ * navigation buttons: the dialog window is edge-to-edge and the content is padded by the system bars and the
+ * keyboard. The body scrolls; the buttons stay pinned below it, so they can always be tapped while typing.
+ */
+@Composable
+fun FormDialog(
+    title: String,
+    onDismiss: () -> Unit,
+    confirmButton: @Composable () -> Unit,
+    dismissButton: @Composable () -> Unit = {},
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
+        val window = (LocalView.current.parent as? DialogWindowProvider)?.window
+        SideEffect { window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE) }
+        Box(
+            Modifier
+                .fillMaxSize()
+                .systemBarsPadding()
+                .imePadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(shape = RoundedCornerShape(28.dp), color = Color.White, shadowElevation = 6.dp) {
+                Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                    Text(
+                        title,
+                        Modifier.padding(bottom = 12.dp),
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    Column(
+                        Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) { content() }
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 12.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        dismissButton()
+                        Spacer(Modifier.width(8.dp))
+                        confirmButton()
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The send / receive box of one section (staff, evaluations or reports). Every section has its own,
+ * separate file: sending one kind of data never includes the others.
+ */
+@Composable
+fun ExchangeBar(
+    hint: String,
+    sendLabel: String,
+    sendEnabled: Boolean,
+    sendFailed: Boolean,
+    onSend: () -> Unit,
+    onReceive: () -> Unit
+) {
+    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onSend, enabled = sendEnabled, modifier = Modifier.weight(1f)) { Text(sendLabel) }
+                OutlinedButton(onClick = onReceive, modifier = Modifier.weight(1f)) { Text("دریافت از فایل") }
+            }
+            if (sendFailed) {
+                Text("ارسال انجام نشد.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            Text(hint, color = Color.Gray, style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}

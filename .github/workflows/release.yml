@@ -1,0 +1,50 @@
+name: Release APK
+
+# Runs when a tag like v1.2.0 is pushed (or a GitHub Release is published with a new tag).
+on:
+  push:
+    tags: [ "v*" ]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # The runner image already ships the Android SDK; only the licenses need accepting.
+      # (android-actions/setup-android@v3 currently fails: "Failed to find package 'tools'".)
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Test and build signed release APK
+        run: |
+          export APP_VERSION_NAME="${GITHUB_REF_NAME#v}"
+          gradle testDebugUnitTest assembleRelease
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          FILE="taghvim-kari-${GITHUB_REF_NAME}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$FILE"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$FILE" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$FILE" --title "$GITHUB_REF_NAME" --generate-notes
+          fi
