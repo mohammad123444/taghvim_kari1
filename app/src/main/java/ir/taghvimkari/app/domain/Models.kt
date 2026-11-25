@@ -49,7 +49,22 @@ data class Person(
     /** May evaluate other people (ارزیاب). Shift leaders are evaluators by default. */
     val canEvaluate: Boolean = false,
     /** Shift name: "A", "B", "C" or "D" (empty for older saves). */
-    val shiftName: String = ""
+    val shiftName: String = "",
+    /**
+     * Earlier schedules, kept when the person was moved to another shift: each one was valid for dates
+     * BEFORE [ScheduleSegment.until]. The current fields above are valid from the latest move on.
+     */
+    val history: List<ScheduleSegment> = emptyList()
+)
+
+/** The schedule a person had until (not including) [until]; used so a transfer does not rewrite the past. */
+data class ScheduleSegment(
+    val until: LocalDate,
+    val pattern: Pattern,
+    val startDate: LocalDate,
+    val startWeekday: Int,
+    val shiftName: String,
+    val leaderId: String?
 )
 
 /** The four shift names offered when registering a person. */

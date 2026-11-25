@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import ir.taghvimkari.app.data.DataExchange
 import ir.taghvimkari.app.domain.JalaliDate
 import ir.taghvimkari.app.domain.Person
@@ -76,8 +77,10 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
     val reports = viewModel.reports
 
     var mode by rememberSaveable { mutableStateOf(0) } // 0 this month, 1 last month, 2 this year, 3 all, 4 custom
-    var customFrom by rememberSaveable { mutableStateOf(today.minusDays(29).toEpochDay()) }
-    var customTo by rememberSaveable { mutableStateOf(today.toEpochDay()) }
+    // The custom period starts empty: the boxes only say «از» and «تا» until a date is chosen.
+    var customFrom by rememberSaveable { mutableStateOf(NO_DATE) }
+    var customTo by rememberSaveable { mutableStateOf(NO_DATE) }
+    var openFolds by rememberSaveable { mutableStateOf("") }
     var picker by rememberSaveable { mutableStateOf(0) } // 0 closed, 1 from, 2 to
     var personFilter by rememberSaveable { mutableStateOf("") }
     var showNew by rememberSaveable { mutableStateOf(false) }
@@ -89,7 +92,9 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
         if (uri != null) viewModel.offerImport(uri)
     }
 
-    val labelled = remember(people) { uniqueLabels(people) }
+    // Reports can be reviewed for everybody (also people who left); new records are only written for active people.
+    val labelled = remember(people) { uniqueLabels(people).map { (p, n) -> p to if (p.active) n else "$n (غیرفعال)" } }
+    val activeLabelled = remember(people) { uniqueLabels(people.filter { it.active }) }
     val nameById = remember(people) { people.associate { it.id to it.name } }
     val rankById = remember(people) { people.associate { it.id to it.shiftRank } }
     val nameOf: (ReportEntry) -> String = { e -> nameById[e.personId] ?: e.personName }
@@ -151,10 +156,10 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
                 if (mode == 4) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { picker = 1 }, modifier = Modifier.weight(1f)) {
-                            Text("از: ${JalaliDate.from(LocalDate.ofEpochDay(customFrom)).display()}")
+                            Text(dateBoxText("از", customFrom))
                         }
                         OutlinedButton(onClick = { picker = 2 }, modifier = Modifier.weight(1f)) {
-                            Text("تا: ${JalaliDate.from(LocalDate.ofEpochDay(customTo)).display()}")
+                            Text(dateBoxText("تا", customTo))
                         }
                     }
                 }
@@ -170,14 +175,6 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
                         onSend = { sendFailed = !DataExchange.shareReports(context, filtered) },
                         onReceive = { filePicker.launch(arrayOf("*/*")) }
                     )
-                    OutlinedButton(
-                        onClick = {
-                            val text = buildReportText(period.label, filterLabel, filtered, nameOf)
-                            shareText(context, text)
-                        },
-                        enabled = filtered.isNotEmpty(),
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("ارسال سوابق متنی") }
             }
         }
 
@@ -241,22 +238,61 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
         if (filtered.isEmpty()) {
             EmptyMessage("در این بازه سابقه‌ای ثبت نشده است.")
         }
-        filtered.forEach { e -> ReportCard(e, nameOf(e)) { editingId = e.id } }
+        val open = openFolds.split(",").toSet()
+        fun flip(key: String) {
+            openFolds = (if (key in open) open - key else open + key).filter { it.isNotEmpty() }.joinToString(",")
+        }
+        // Rewards and punishments are separate folds; inside each, one fold per person.
+        listOf(
+            Triple("تشویق‌ها", 1, RewardGreen),
+            Triple("تنبیه‌ها", 2, PunishRed)
+        ).forEach { (title, kind, accent) ->
+            val list = filtered.filter { if (kind == 1) it.rewardHours > 0 else it.punishmentHours > 0 }
+            if (list.isEmpty()) return@forEach
+            val key = "k$kind"
+            FoldSection(
+                title = title, count = list.size, accent = accent, expanded = key in open, big = true,
+                onToggle = { flip(key) }, unit = "سابقه"
+            ) {
+                list.groupBy { it.personId }.entries
+                    .sortedWith(compareBy<Map.Entry<String, List<ReportEntry>>> { rankById[it.key] ?: 9 }.thenBy { nameOf(it.value.first()) })
+                    .forEach { (personId, personList) ->
+                        val personKey = "$key-$personId"
+                        FoldSection(
+                            title = nameOf(personList.first()), count = personList.size, accent = accent,
+                            expanded = personKey in open, big = false,
+                            onToggle = { flip(personKey) }, unit = "سابقه"
+                        ) {
+                            personList.forEach { e -> ReportCard(e, nameOf(e), kind) { editingId = e.id } }
+                        }
+                    }
+            }
+        }
+        val neither = filtered.filter { it.rewardHours <= 0 && it.punishmentHours <= 0 }
+        if (neither.isNotEmpty()) {
+            val key = "k0"
+            FoldSection(
+                title = "بدون ساعت", count = neither.size, accent = Color.Gray, expanded = key in open, big = true,
+                onToggle = { flip(key) }, unit = "سابقه"
+            ) {
+                neither.forEach { e -> ReportCard(e, nameOf(e), 0) { editingId = e.id } }
+            }
+        }
     }
 
     // ----- dialogs
     if (picker != 0) {
         JalaliDatePickerDialog(
-            initial = LocalDate.ofEpochDay(if (picker == 1) customFrom else customTo),
+            initial = LocalDate.ofEpochDay((if (picker == 1) customFrom else customTo).let { if (it == NO_DATE) today.toEpochDay() else it }),
             title = if (picker == 1) "تاریخ شروع بازه" else "تاریخ پایان بازه",
             onDismiss = { picker = 0 },
             onPick = { d ->
                 if (picker == 1) {
                     customFrom = d.toEpochDay()
-                    if (customTo < customFrom) customTo = customFrom
+                    if (customTo != NO_DATE && customTo < customFrom) customTo = customFrom
                 } else {
                     customTo = d.toEpochDay()
-                    if (customFrom > customTo) customFrom = customTo
+                    if (customFrom != NO_DATE && customFrom > customTo) customFrom = customTo
                 }
                 picker = 0
             }
@@ -265,7 +301,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
 
     if (showNew) {
         ReportEntryDialog(
-            labelled = labelled,
+            labelled = activeLabelled,
             initial = null,
             presetPersonId = personFilter,
             onDismiss = { showNew = false },
@@ -311,21 +347,22 @@ private fun ShareBar(reward: Double, punishment: Double, height: Dp, modifier: M
 }
 
 @Composable
-private fun ReportCard(entry: ReportEntry, name: String, onClick: () -> Unit) {
+private fun ReportCard(entry: ReportEntry, name: String, kind: Int, onClick: () -> Unit) {
     AppCard(onClick = onClick, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(name, Modifier.weight(1f), fontWeight = FontWeight.Bold, color = Navy)
                 Text(JalaliDate.from(entry.date).display(), color = Color.Gray, style = MaterialTheme.typography.bodySmall)
             }
-            Text(entry.title)
-            if (entry.rewardHours > 0 || entry.punishmentHours > 0) {
+            // The title is the heading; the description of the violation below it is smaller and in another colour.
+            Text(entry.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+            if ((kind != 2 && entry.rewardHours > 0) || (kind != 1 && entry.punishmentHours > 0)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (entry.rewardHours > 0) HoursChip("تشویق ${formatHours(entry.rewardHours)} ساعت", RewardGreen)
-                    if (entry.punishmentHours > 0) HoursChip("تنبیه ${formatHours(entry.punishmentHours)} ساعت", PunishRed)
+                    if (kind != 2 && entry.rewardHours > 0) HoursChip("تشویق ${formatHours(entry.rewardHours)} ساعت", RewardGreen)
+                    if (kind != 1 && entry.punishmentHours > 0) HoursChip("تنبیه ${formatHours(entry.punishmentHours)} ساعت", PunishRed)
                 }
             }
             if (entry.notes.isNotBlank()) {
-                Text(entry.notes, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                Text(entry.notes, color = Color(0xFF6B6B88), fontSize = 12.sp, fontWeight = FontWeight.Normal)
             }
     }
 }
@@ -407,7 +444,7 @@ private fun ReportEntryDialog(
                 }
                 OutlinedTextField(
                     value = notes, onValueChange = { notes = it },
-                    label = { Text("توضیحات") },
+                    label = { Text("شرح تخلف / توضیحات") },
                     minLines = 2,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -479,9 +516,15 @@ private fun periodFor(mode: Int, now: JalaliDate, customFrom: Long, customTo: Lo
     )
     3 -> ReportPeriod("همهٔ زمان‌ها", null, null)
     else -> {
-        val from = LocalDate.ofEpochDay(customFrom)
-        val to = LocalDate.ofEpochDay(customTo)
-        ReportPeriod("از ${JalaliDate.from(from).display()} تا ${JalaliDate.from(to).display()}", from, to)
+        val from = customFrom.takeIf { it != NO_DATE }?.let { LocalDate.ofEpochDay(it) }
+        val to = customTo.takeIf { it != NO_DATE }?.let { LocalDate.ofEpochDay(it) }
+        val label = when {
+            from == null && to == null -> "بازهٔ دلخواه (همهٔ زمان‌ها)"
+            from != null && to != null -> "از ${JalaliDate.from(from).display()} تا ${JalaliDate.from(to).display()}"
+            from != null -> "از ${JalaliDate.from(from).display()}"
+            else -> "تا ${JalaliDate.from(to!!).display()}"
+        }
+        ReportPeriod(label, from, to)
     }
 }
 

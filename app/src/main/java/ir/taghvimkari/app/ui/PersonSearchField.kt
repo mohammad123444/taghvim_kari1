@@ -1,6 +1,10 @@
 package ir.taghvimkari.app.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,13 +36,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ir.taghvimkari.app.domain.MIN_SEARCH_CHARS
 import ir.taghvimkari.app.domain.Person
+import ir.taghvimkari.app.domain.toPersian
+import ir.taghvimkari.app.domain.nameMatches
 import ir.taghvimkari.app.domain.normalizeFa
+import ir.taghvimkari.app.domain.searchTooShort
 
 /**
  * Type part of a name and the matching full names are suggested right below, in alphabetical order.
  * [options] must already be in the order to show. [selectedId] is blank when nobody is chosen.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PersonSearchField(
     label: String,
@@ -61,15 +70,26 @@ fun PersonSearchField(
 
     val q = normalizeFa(query)
     val showing = focused && query != selectedLabel
-    val suggestions = if (!showing) {
+    // Nothing is found until three characters are typed.
+    val tooShort = searchTooShort(query)
+    val suggestions = if (!showing || tooShort) {
         emptyList()
     } else if (q.isBlank()) {
         options
     } else {
-        options.filter { normalizeFa(it.second).contains(q) }
+        options.filter { nameMatches(it.second, query) }
     }
 
-    Column(modifier) {
+    // The field and its suggestions are scrolled into view, so the keyboard never hides them.
+    val requester = remember { BringIntoViewRequester() }
+    LaunchedEffect(showing, query, suggestions.size) {
+        if (showing) {
+            delay(250)
+            requester.bringIntoView()
+        }
+    }
+
+    Column(modifier.bringIntoViewRequester(requester)) {
         OutlinedTextField(
             value = query,
             onValueChange = {
@@ -98,7 +118,7 @@ fun PersonSearchField(
             ) {
                 if (suggestions.isEmpty()) {
                     Text(
-                        "نامی با این حروف پیدا نشد.",
+                        if (tooShort) "حداقل ${MIN_SEARCH_CHARS.toPersian()} حرف از نام را بنویسید." else "نامی با این حروف پیدا نشد.",
                         Modifier.padding(12.dp),
                         color = Color.Gray,
                         style = MaterialTheme.typography.bodySmall

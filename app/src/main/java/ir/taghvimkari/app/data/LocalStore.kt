@@ -6,6 +6,7 @@ import ir.taghvimkari.app.domain.Employment
 import ir.taghvimkari.app.domain.Pattern
 import ir.taghvimkari.app.domain.Person
 import ir.taghvimkari.app.domain.SHIFT_NAMES
+import ir.taghvimkari.app.domain.ScheduleSegment
 import ir.taghvimkari.app.domain.WorkTypes
 import org.json.JSONArray
 import org.json.JSONObject
@@ -50,9 +51,42 @@ class LocalStore(context: Context) {
                     },
                     // Older saves have no such field: shift leaders were the evaluators.
                     canEvaluate = o.optBoolean("canEvaluate", leader),
-                    shiftName = o.optString("shiftName", "").takeIf { it in SHIFT_NAMES } ?: ""
+                    shiftName = o.optString("shiftName", "").takeIf { it in SHIFT_NAMES } ?: "",
+                    history = decodeHistory(o.optJSONArray("history"))
                 )
             }.getOrNull()
+        }
+
+        private fun decodeHistory(array: JSONArray?): List<ScheduleSegment> {
+            if (array == null) return emptyList()
+            return (0 until array.length()).mapNotNull { i ->
+                runCatching {
+                    val o = array.getJSONObject(i)
+                    ScheduleSegment(
+                        until = LocalDate.parse(o.getString("until")),
+                        pattern = Pattern.valueOf(o.getString("pattern")),
+                        startDate = LocalDate.parse(o.getString("startDate")),
+                        startWeekday = o.optInt("startWeekday", 0).coerceIn(0, 6),
+                        shiftName = o.optString("shiftName", ""),
+                        leaderId = o.optString("leaderId", "").ifBlank { null }
+                    )
+                }.getOrNull()
+            }
+        }
+
+        private fun encodeHistory(list: List<ScheduleSegment>): JSONArray = JSONArray().also { array ->
+            list.forEach { h ->
+                array.put(
+                    JSONObject().apply {
+                        put("until", h.until.toString())
+                        put("pattern", h.pattern.name)
+                        put("startDate", h.startDate.toString())
+                        put("startWeekday", h.startWeekday)
+                        put("shiftName", h.shiftName)
+                        put("leaderId", h.leaderId ?: "")
+                    }
+                )
+            }
         }
 
         fun encode(people: List<Person>): JSONArray {
@@ -73,6 +107,7 @@ class LocalStore(context: Context) {
                         put("category", p.category.name)
                         put("canEvaluate", p.canEvaluate)
                         put("shiftName", p.shiftName)
+                        put("history", encodeHistory(p.history))
                     }
                 )
             }

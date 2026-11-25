@@ -84,7 +84,18 @@ object DataExchange {
 
     /** Parses a received file. Throws [IllegalArgumentException] with a Persian message if it is not valid. */
     fun parse(text: String): Incoming {
-        val trimmed = text.trim().removePrefix("\uFEFF")
+        var trimmed = text.trim().removePrefix("\uFEFF")
+        // Files sent by this version are encrypted: {"app":"taghvim-kari","enc":1,"data":"..."}.
+        if (trimmed.startsWith("{")) {
+            val envelope = runCatching { JSONObject(trimmed) }.getOrNull()
+            if (envelope != null && envelope.optInt("enc", 0) == 1) {
+                trimmed = try {
+                    Secure.decrypt(envelope.getString("data"))
+                } catch (e: Exception) {
+                    throw IllegalArgumentException("فایل معتبر نیست یا آسیب دیده است.")
+                }
+            }
+        }
         val result: Incoming = try {
             if (trimmed.startsWith("[")) {
                 Incoming.Full(ExchangeData(peopleOf(JSONArray(trimmed)), null, null))
@@ -155,7 +166,9 @@ object DataExchange {
         val dir = File(context.cacheDir, "shared").apply { mkdirs() }
         dir.listFiles()?.forEach { it.delete() }
         val file = File(dir, fileName)
-        file.writeText(json, Charsets.UTF_8)
+        // The file on disk (and what is sent) is encrypted; only this app can read it.
+        val sealed = JSONObject().put("app", APP).put("enc", 1).put("data", Secure.encrypt(json)).toString()
+        file.writeText(sealed, Charsets.UTF_8)
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
         val send = Intent(Intent.ACTION_SEND)
             .setType(MIME)

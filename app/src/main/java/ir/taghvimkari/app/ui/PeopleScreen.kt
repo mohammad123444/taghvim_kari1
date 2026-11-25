@@ -9,8 +9,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Button
@@ -34,7 +34,10 @@ import androidx.compose.ui.unit.dp
 import ir.taghvimkari.app.domain.JalaliDate
 import ir.taghvimkari.app.domain.Person
 import ir.taghvimkari.app.domain.ShiftEngine
-import ir.taghvimkari.app.domain.sortedByTeam
+import ir.taghvimkari.app.domain.MIN_SEARCH_CHARS
+import ir.taghvimkari.app.domain.nameMatches
+import ir.taghvimkari.app.domain.searchTooShort
+import ir.taghvimkari.app.domain.toPersian
 import java.time.LocalDate
 
 @Composable
@@ -53,22 +56,21 @@ fun PeopleScreen(
     val date = LocalDate.ofEpochDay(dateEpoch)
     val isToday = date == LocalDate.now()
     val leaderNames = people.filter { it.isLeader }.associate { it.id to it.name }
-    // Each shift leader comes first, immediately followed by his members.
-    val filtered = people
-        .filter { it.name.contains(query.trim(), ignoreCase = true) }
-        .sortedByTeam(leaderNames) { it }
+    // Names are searched only after three characters; the folds open by themselves while searching.
+    val searching = query.isNotBlank()
+    val filtered = people.filter { nameMatches(it.name, query) }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(CardGap)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onAdd, modifier = Modifier.weight(1f)) { Text("+ افزودن نیرو") }
             Button(onClick = onCompare, modifier = Modifier.weight(1f)) { Text("مقایسهٔ نیروها") }
         }
         // Search and send / receive stay folded until needed; the dot shows while a search is on.
-        FoldBox("جستجو و ارسال/دریافت", active = query.isNotBlank()) {
+        FoldBox("جستجو و ارسال/دریافت", active = searching) {
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("جستجو بر اساس نام") },
+                modifier = Modifier.fillMaxWidth().keepVisibleWhenFocused(),
+                label = { Text("جستجو بر اساس نام (حداقل ${MIN_SEARCH_CHARS.toPersian()} حرف)") },
                 singleLine = true
             )
             ExchangeRow(
@@ -76,6 +78,11 @@ fun PeopleScreen(
                 sendFailed = sendFailed,
                 onSend = onSend,
                 onReceive = onReceive
+            )
+            Text(
+                "فایل دریافتی، فهرست نیروهای فعلی را کاملاً جایگزین می‌کند (ادغام نمی‌شود) و نام‌های تکراری حذف می‌شوند.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray
             )
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -94,9 +101,12 @@ fun PeopleScreen(
                 modifier = Modifier.padding(horizontal = 4.dp)
             )
         }
-        if (filtered.isEmpty()) EmptyMessage("نیرویی پیدا نشد.")
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(CardGap)) {
-            items(filtered, key = { it.id }) { p ->
+        if (filtered.isEmpty()) {
+            EmptyMessage(if (searchTooShort(query)) "برای جستجو حداقل ${MIN_SEARCH_CHARS.toPersian()} حرف بنویسید." else "نیرویی پیدا نشد.")
+        }
+        // Folded by shift name (A, B, C, D) and, inside, by employment; each shift leader first, then his members.
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            ShiftEmploymentFolds(items = filtered, person = { it }, stateKey = "people", forceOpen = searching) { p ->
                 Row(
                     Modifier.padding(start = if (p.leaderId != null && !p.isLeader) 20.dp else 0.dp),
                     verticalAlignment = Alignment.CenterVertically

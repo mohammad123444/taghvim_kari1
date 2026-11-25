@@ -24,6 +24,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -51,7 +52,9 @@ import ir.taghvimkari.app.domain.SummaryCell
 import ir.taghvimkari.app.domain.formatNumber
 import ir.taghvimkari.app.domain.formatScore
 import ir.taghvimkari.app.domain.formatSigned
-import ir.taghvimkari.app.domain.normalizeFa
+import ir.taghvimkari.app.domain.MIN_SEARCH_CHARS
+import ir.taghvimkari.app.domain.nameMatches
+import ir.taghvimkari.app.domain.searchTooShort
 import ir.taghvimkari.app.domain.parseNumber
 import ir.taghvimkari.app.domain.periodKeyOf
 import ir.taghvimkari.app.domain.periodText
@@ -66,6 +69,11 @@ private val COL_W = 70.dp
 private fun monthRange(year: Int, month: Int): Pair<LocalDate, LocalDate> =
     JalaliDate(year, month, 1).toLocalDate() to
         JalaliDate(year, month, JalaliDate.monthLength(year, month)).toLocalDate()
+
+/** Summary groups, in this order: پیمانکاری، رسمی، قرارداد مستقیم. */
+private val SUMMARY_ORDER = listOf(Employment.CONTRACTOR, Employment.OFFICIAL, Employment.CONTRACTUAL)
+
+private fun summaryTitle(e: Employment): String = if (e == Employment.CONTRACTUAL) "قرارداد مستقیم" else e.title
 
 private fun employmentAccent(e: Employment): Color = when (e) {
     Employment.OFFICIAL -> Purple
@@ -94,8 +102,10 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
     val people = viewModel.people
     val today = LocalDate.now()
     val thisMonth = remember { JalaliDate.from(today) }
-    var fromEpoch by rememberSaveable { mutableStateOf(monthRange(thisMonth.year, thisMonth.month).first.toEpochDay()) }
-    var toEpoch by rememberSaveable { mutableStateOf(monthRange(thisMonth.year, thisMonth.month).second.toEpochDay()) }
+    // The boxes start empty: only «از» and «تا» are written until the dates are chosen.
+    var fromEpoch by rememberSaveable { mutableStateOf(NO_DATE) }
+    var toEpoch by rememberSaveable { mutableStateOf(NO_DATE) }
+    var showInactive by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var picker by rememberSaveable { mutableStateOf(0) } // 0 closed, 1 from, 2 to
     var editPerson by rememberSaveable { mutableStateOf("") }
@@ -106,14 +116,14 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
     }
     var foldedGroups by rememberSaveable { mutableStateOf("") } // employment kinds that are folded
 
-    val from = LocalDate.ofEpochDay(fromEpoch)
-    val to = LocalDate.ofEpochDay(toEpoch)
+    val hasPeriod = fromEpoch != NO_DATE && toEpoch != NO_DATE
+    val from = LocalDate.ofEpochDay(if (fromEpoch == NO_DATE) today.toEpochDay() else fromEpoch)
+    val to = LocalDate.ofEpochDay(if (toEpoch == NO_DATE) today.toEpochDay() else toEpoch)
     val key = periodKeyOf(from, to)
-    val q = normalizeFa(query)
 
-    val rows = people.filter { it.active }
+    val rows = (if (!hasPeriod) emptyList<Person>() else people.filter { it.active || showInactive })
         .sortedByShiftName()
-        .filter { q.isBlank() || normalizeFa(it.name).contains(q) }
+        .filter { nameMatches(it.name, query) }
         .map { p ->
             val evals = viewModel.evaluations.filter {
                 it.personId == p.id && it.isComplete && it.dateTo >= from && it.date <= to
@@ -127,18 +137,19 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
             )
         }
 
+    Box(Modifier.fillMaxSize()) {
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(CardGap)
     ) {
         AppCard(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("بازهٔ جمع‌بندی", fontWeight = FontWeight.Bold, color = Navy, style = MaterialTheme.typography.titleMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { picker = 1 }, modifier = Modifier.weight(1f)) {
-                        Text("از: ${JalaliDate.from(from).display()}")
+                        Text(dateBoxText("از", fromEpoch))
                     }
                     OutlinedButton(onClick = { picker = 2 }, modifier = Modifier.weight(1f)) {
-                        Text("تا: ${JalaliDate.from(to).display()}")
+                        Text(dateBoxText("تا", toEpoch))
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -162,34 +173,38 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
         }
 
         // Search and send / receive stay folded until needed; the dot shows while a search is on.
-        FoldBox("جستجو و ارسال/دریافت", active = query.isNotBlank()) {
+        FoldBox("جستجو و ارسال/دریافت", active = query.isNotBlank() || showInactive) {
             OutlinedTextField(
                 value = query, onValueChange = { query = it },
-                label = { Text("جستجوی نام") }, singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                label = { Text("جستجوی نام (حداقل ${MIN_SEARCH_CHARS.toPersian()} حرف)") }, singleLine = true,
+                modifier = Modifier.fillMaxWidth().keepVisibleWhenFocused()
             )
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("نمایش غیرفعال‌ها (از واحد رفته‌ها)", Modifier.weight(1f))
+                Switch(checked = showInactive, onCheckedChange = { showInactive = it })
+            }
             ExchangeRow(
                 sendEnabled = viewModel.summaryCells.isNotEmpty(),
                 sendFailed = sendFailed,
                 onSend = { sendFailed = !DataExchange.shareSummary(context, viewModel.summaryCells) },
                 onReceive = { filePicker.launch(arrayOf("*/*")) }
             )
-            OutlinedButton(
-                onClick = { shareText(context, buildSummaryText(from, to, rows)) },
-                enabled = rows.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("ارسال جدول به صورت متن") }
         }
 
         if (rows.isEmpty()) {
             EmptyMessage(
-                if (people.none { it.active }) "ابتدا در بخش «نیروها» افراد را ثبت کنید." else "نیرویی پیدا نشد."
+                when {
+                    !hasPeriod -> "ابتدا تاریخ «از» و «تا» را انتخاب کنید."
+                    people.none { it.active } -> "ابتدا در بخش «نیروها» افراد را ثبت کنید."
+                    searchTooShort(query) -> "برای جستجو حداقل ${MIN_SEARCH_CHARS.toPersian()} حرف بنویسید."
+                    else -> "نیرویی پیدا نشد."
+                }
             )
         } else {
             val tableWidth = NAME_W + COL_W * 5
             AppCard {
                 Column(Modifier.horizontalScroll(rememberScrollState()).width(tableWidth)) {
-                    Employment.entries.forEach { emp ->
+                    SUMMARY_ORDER.forEach { emp ->
                         val group = rows.filter { it.person.employment == emp }
                         if (group.isEmpty()) return@forEach
                         val folded = emp.name in foldedGroups.split(",")
@@ -205,7 +220,7 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
                                 .padding(horizontal = 12.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(emp.title, Modifier.weight(1f), fontWeight = FontWeight.Bold, color = employmentAccent(emp))
+                            Text(summaryTitle(emp), Modifier.weight(1f), fontWeight = FontWeight.Bold, color = employmentAccent(emp))
                             Text("${group.size.toPersian()} نفر", color = Color.Gray, style = MaterialTheme.typography.labelMedium)
                             Text(if (folded) "▼" else "▲", Modifier.padding(start = 10.dp), color = employmentAccent(emp))
                         }
@@ -223,8 +238,11 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
                                 Row {
                                     SummaryCellBox(
                                         NAME_W,
-                                        r.person.name + if (r.person.shiftName.isNotBlank()) " (${r.person.shiftName})" else "",
-                                        Navy, bold = true, align = TextAlign.Start
+                                        r.person.name + (if (r.person.shiftName.isNotBlank()) " (${r.person.shiftName})" else "") +
+                                            (if (!r.person.active) " • غیرفعال" else ""),
+                                        if (r.person.isLeader) LeaderNameColor else MemberNameColor,
+                                        bold = r.person.isLeader, align = TextAlign.Start,
+                                        fontSize = if (r.person.isLeader) 15.sp else 12.sp
                                     )
                                     SummaryCellBox(COL_W, formatNumber(r.total), Navy, bold = true, bg = Navy.copy(alpha = .08f))
                                     SummaryCellBox(
@@ -263,6 +281,9 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
             )
         }
     }
+    // Floating averages: stay on screen while scrolling, one per employment kind.
+    if (rows.isNotEmpty()) FloatingAverages(rows, Modifier.align(Alignment.BottomCenter))
+    }
 
     // ----- edit a typed cell
     val editRow = rows.firstOrNull { it.person.id == editPerson }
@@ -298,10 +319,10 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
             onPick = { d ->
                 if (picker == 1) {
                     fromEpoch = d.toEpochDay()
-                    if (toEpoch < fromEpoch) toEpoch = fromEpoch
+                    if (toEpoch != NO_DATE && toEpoch < fromEpoch) toEpoch = fromEpoch
                 } else {
                     toEpoch = d.toEpochDay()
-                    if (fromEpoch > toEpoch) fromEpoch = toEpoch
+                    if (fromEpoch != NO_DATE && fromEpoch > toEpoch) fromEpoch = toEpoch
                 }
                 picker = 0
             }
@@ -318,6 +339,7 @@ private fun SummaryCellBox(
     bg: Color = Color.Transparent,
     align: TextAlign = TextAlign.Center,
     marker: Boolean = false,
+    fontSize: androidx.compose.ui.unit.TextUnit = 13.sp,
     onClick: (() -> Unit)? = null
 ) {
     Box(
@@ -336,7 +358,7 @@ private fun SummaryCellBox(
             color = color,
             fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
             maxLines = 2,
-            fontSize = 13.sp
+            fontSize = fontSize
         )
         if (marker) {
             Text("●", Modifier.align(Alignment.TopStart), color = Purple, fontSize = 8.sp)
@@ -394,18 +416,31 @@ private fun CellDialog(
     )
 }
 
-private fun buildSummaryText(from: LocalDate, to: LocalDate, rows: List<SummaryRow>): String = buildString {
-    appendLine("جمع‌بندی • ${periodText(from, to)}")
-    appendLine("(ارزشیابی + تشویق / تنبیه + ملاحظات + رئیس = جمع)")
-    rows.forEach { r ->
-        appendLine()
-        appendLine(
-            "• ${r.person.name}" + if (r.person.shiftName.isNotBlank()) " (شیفت ${r.person.shiftName})" else ""
-        )
-        append("  ${r.evaluation?.let { formatScore(it) } ?: "۰"} + ${formatSigned(r.reward)}")
-        append(" + ${formatSigned(r.cell?.extra ?: 0.0)} + ${formatNumber(r.cell?.level ?: 0.0)}")
-        appendLine(" = ${formatNumber(r.total)}")
-        val note = r.cell?.comment.orEmpty()
-        if (note.isNotBlank()) appendLine("  توضیح ملاحظات: $note")
+/** «میانگین»: the average of the «جمع» column for پیمانکاری, رسمی and قرارداد مستقیم, floating over the table. */
+@Composable
+private fun FloatingAverages(rows: List<SummaryRow>, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier.fillMaxWidth().padding(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Navy),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Text("میانگین جمع", color = Color(0xFFFFD54F), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                SUMMARY_ORDER.forEach { emp ->
+                    val group = rows.filter { it.person.employment == emp }
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(summaryTitle(emp), color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                        Text(
+                            if (group.isEmpty()) "—" else formatNumber(group.sumOf { it.total } / group.size),
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                }
+            }
+        }
     }
-}.trim()
+}

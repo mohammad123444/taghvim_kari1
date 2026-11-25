@@ -28,7 +28,18 @@ object ShiftEngine {
     /** Java DayOfWeek: Monday=1 ... Sunday=7. Persian weekday: Saturday=0 ... Friday=6. */
     fun persianWeekday(date: LocalDate): Int = (date.dayOfWeek.value + 1) % 7
 
-    fun shift(person: Person, date: LocalDate, officialHolidays: Set<LocalDate> = emptySet()): Shift {
+    /** The person as he was on [date]: after a transfer, older dates still use the schedule he had then. */
+    private fun effective(person: Person, date: LocalDate): Person {
+        if (person.history.isEmpty()) return person
+        val seg = person.history.sortedBy { it.until }.firstOrNull { date.isBefore(it.until) } ?: return person
+        return person.copy(
+            pattern = seg.pattern, startDate = seg.startDate, startWeekday = seg.startWeekday,
+            shiftName = seg.shiftName, leaderId = seg.leaderId, history = emptyList()
+        )
+    }
+
+    fun shift(source: Person, date: LocalDate, officialHolidays: Set<LocalDate> = emptySet()): Shift {
+        val person = effective(source, date)
         if (person.pattern == Pattern.OFFICIAL_DAYS) {
             val isWorkday = persianWeekday(date) in 0..4 && date !in officialHolidays
             return if (isWorkday) Shift.WORK else Shift.REST
@@ -56,7 +67,7 @@ object ShiftEngine {
     }
 
     fun status(person: Person, date: LocalDate): DayStatus {
-        val anchor = anchor(person)
+        val anchor = anchor(effective(person, date))
         if (anchor != null && date.isBefore(anchor)) {
             return DayStatus(Shift.REST, false, false, 0, ChronoUnit.DAYS.between(date, anchor).toInt())
         }
@@ -77,7 +88,7 @@ object ShiftEngine {
             toChange++
             d = d.plusDays(1)
         }
-        val restWeek = if (!working && person.pattern != Pattern.OFFICIAL_DAYS) (elapsed - 1) / 7 + 1 else 0
+        val restWeek = if (!working && effective(person, date).pattern != Pattern.OFFICIAL_DAYS) (elapsed - 1) / 7 + 1 else 0
         return DayStatus(current, working, true, elapsed, toChange, restWeek)
     }
 

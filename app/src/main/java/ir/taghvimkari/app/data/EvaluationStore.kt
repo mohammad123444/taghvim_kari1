@@ -36,6 +36,7 @@ class EvaluationStore(context: Context) {
                         put("date", e.date.toString())
                         put("dateTo", e.dateTo.toString())
                         put("scores", JSONArray(e.scores))
+                        put("note", e.note)
                     }
                 )
             }
@@ -56,6 +57,7 @@ class EvaluationStore(context: Context) {
                     evaluatorName = o.optString("evaluatorName", ""),
                     date = from,
                     dateTo = to,
+                    note = o.optString("note", ""),
                     scores = List(EvaluationItems.count) {
                         // 0 = not scored yet (draft)
                         raw.optInt(it, 0).coerceIn(0, EvaluationItems.MAX_SCORE)

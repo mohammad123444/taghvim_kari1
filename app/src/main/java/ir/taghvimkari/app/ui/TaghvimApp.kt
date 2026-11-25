@@ -27,7 +27,11 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import ir.taghvimkari.app.domain.sortedByShiftName
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -71,6 +75,7 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
     var editing by remember { mutableStateOf<Person?>(null) }
     var peopleSendFailed by rememberSaveable { mutableStateOf(false) }
     var showCompare by rememberSaveable { mutableStateOf(false) }
+    var transferringId by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.offerImport(uri)
@@ -161,9 +166,42 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
         AddPersonDialog(
             initial = person,
             memberCount = viewModel.people.count { it.leaderId == person.id },
+            existingMembers = viewModel.people.filter { it.leaderId == person.id }.sortedByShiftName().map { it.name },
+            onTransfer = { editing = null; transferringId = person.id },
             onDelete = { editing = null; viewModel.remove(person.id) },
             onDismiss = { editing = null },
             onSave = { head, members, apply -> viewModel.update(head, members, apply); editing = null }
+        )
+    }
+
+    val transferring = transferringId?.let { id -> viewModel.people.firstOrNull { it.id == id } }
+    if (transferring != null) {
+        TransferDialog(
+            person = transferring,
+            people = viewModel.people,
+            onMove = { shift, leaderId, from ->
+                viewModel.moveToShift(transferring.id, shift, leaderId, from)
+                transferringId = null
+            },
+            onSwap = { otherId, from ->
+                viewModel.swapShifts(transferring.id, otherId, from)
+                transferringId = null
+            },
+            onDismiss = { transferringId = null }
+        )
+    }
+
+    viewModel.duplicateAlarm?.let { names ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissDuplicateAlarm,
+            title = { Text("هشدار: نام تکراری", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error) },
+            text = {
+                ScrollText(
+                    "در فایل دریافتی ${names.size.toPersian()} نام تکراری بود و ثبت نشد:\n" +
+                        names.joinToString("\n") { "• $it" }
+                )
+            },
+            confirmButton = { TextButton(onClick = viewModel::dismissDuplicateAlarm) { Text("باشه") } }
         )
     }
 
@@ -189,7 +227,7 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
                         if (hasPeople) "${incoming.people.size.toPersian()} نفر" else null
                     ) + others).joinToString("، ") + " هست. " +
                         (if (hasPeople) {
-                            "فهرست نیروهای فعلی این گوشی (${viewModel.people.size.toPersian()} نفر) کاملاً با آن جایگزین می‌شود. "
+                            "فهرست نیروهای فعلی این گوشی (${viewModel.people.size.toPersian()} نفر) کاملاً با آن جایگزین می‌شود (ادغام انجام نمی‌شود) و نام‌های تکراری ثبت نمی‌شوند. "
                         } else "") +
                         (if (others.isNotEmpty()) {
                             "بقیهٔ موارد به اطلاعات فعلی اضافه می‌شود و چیزی از آن‌ها حذف نمی‌شود. "
@@ -204,37 +242,29 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
 
     viewModel.pendingReports?.let { incoming ->
         val merge = viewModel.previewReportMerge(incoming)
-        AlertDialog(
-            onDismissRequest = viewModel::cancelReportImport,
-            title = { Text("دریافت سوابق", fontWeight = FontWeight.Bold) },
-            text = {
-                ScrollText(
-                    "در فایل دریافتی ${incoming.size.toPersian()} سابقه هست: " +
-                        "${merge.added.toPersian()} مورد جدید، ${merge.updated.toPersian()} مورد به‌روزشده و " +
-                        "${merge.unchanged.toPersian()} مورد بدون تغییر. " +
-                        "سوابق فعلی این گوشی حذف نمی‌شوند و فقط این موارد به آن‌ها اضافه می‌شود. ادامه می‌دهید؟"
-                )
-            },
-            confirmButton = { TextButton(onClick = viewModel::confirmReportImport) { Text("اضافه کن", fontWeight = FontWeight.Bold) } },
-            dismissButton = { TextButton(onClick = viewModel::cancelReportImport) { Text("انصراف") } }
+        MergeDialog(
+            title = "دریافت سوابق",
+            what = "سابقه",
+            total = incoming.size,
+            added = merge.added,
+            unchanged = merge.unchanged,
+            conflicts = merge.conflicts,
+            onConfirm = { replace, reason -> viewModel.confirmReportImport(replace, reason) },
+            onCancel = viewModel::cancelReportImport
         )
     }
 
     viewModel.pendingEvaluations?.let { incoming ->
         val merge = viewModel.previewEvaluationMerge(incoming)
-        AlertDialog(
-            onDismissRequest = viewModel::cancelEvaluationImport,
-            title = { Text("دریافت ارزیابی‌ها", fontWeight = FontWeight.Bold) },
-            text = {
-                ScrollText(
-                    "در فایل دریافتی ${incoming.size.toPersian()} ارزیابی هست: " +
-                        "${merge.added.toPersian()} مورد جدید، ${merge.updated.toPersian()} مورد به‌روزشده و " +
-                        "${merge.unchanged.toPersian()} مورد بدون تغییر. " +
-                        "ارزیابی‌های فعلی این گوشی حذف نمی‌شوند و فقط این موارد به آن‌ها اضافه می‌شود. ادامه می‌دهید؟"
-                )
-            },
-            confirmButton = { TextButton(onClick = viewModel::confirmEvaluationImport) { Text("اضافه کن", fontWeight = FontWeight.Bold) } },
-            dismissButton = { TextButton(onClick = viewModel::cancelEvaluationImport) { Text("انصراف") } }
+        MergeDialog(
+            title = "دریافت ارزیابی‌ها",
+            what = "ارزیابی",
+            total = incoming.size,
+            added = merge.added,
+            unchanged = merge.unchanged,
+            conflicts = merge.conflicts,
+            onConfirm = { replace, reason -> viewModel.confirmEvaluationImport(replace, reason) },
+            onCancel = viewModel::cancelEvaluationImport
         )
     }
 
@@ -349,4 +379,62 @@ private fun AppNavigation(selected: Int, onSelect: (Int) -> Unit) {
             icon = { Icon(Icons.Default.Check, contentDescription = null) }, label = { Text("جمع‌بندی", maxLines = 1) }
         )
     }
+}
+
+/**
+ * Received records / evaluations are always merged into the current ones (nothing is deleted).
+ * When some look like existing ones but differ, the person chooses: keep the existing ones, or replace them
+ * after writing the reason.
+ */
+@Composable
+private fun MergeDialog(
+    title: String,
+    what: String,
+    total: Int,
+    added: Int,
+    unchanged: Int,
+    conflicts: Int,
+    onConfirm: (replaceSimilar: Boolean, reason: String) -> Unit,
+    onCancel: () -> Unit
+) {
+    var reason by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(title, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "در فایل دریافتی ${total.toPersian()} $what هست: ${added.toPersian()} مورد جدید و " +
+                        "${unchanged.toPersian()} مورد بدون تغییر. اطلاعات فعلی حذف نمی‌شود و موارد جدید به آن اضافه می‌شود."
+                )
+                if (conflicts > 0) {
+                    Text(
+                        "${conflicts.toPersian()} مورد مشابه موارد فعلی است ولی تفاوت دارد. اگر نیاز به جایگزینی دارد، دلیل را بنویسید؛ در غیر این صورت موارد فعلی می‌مانند.",
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
+                    OutlinedTextField(
+                        value = reason,
+                        onValueChange = { reason = it },
+                        label = { Text("دلیل جایگزینی") },
+                        minLines = 2,
+                        modifier = Modifier.fillMaxWidth().keepVisibleWhenFocused()
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Row {
+                if (conflicts > 0) {
+                    TextButton(onClick = { onConfirm(true, reason) }, enabled = reason.isNotBlank()) {
+                        Text("جایگزین کن", fontWeight = FontWeight.Bold)
+                    }
+                }
+                TextButton(onClick = { onConfirm(false, "") }) {
+                    Text(if (conflicts > 0) "فقط موارد جدید" else "اضافه کن", fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        dismissButton = { TextButton(onClick = onCancel) { Text("انصراف") } }
+    )
 }

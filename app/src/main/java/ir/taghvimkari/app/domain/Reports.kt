@@ -84,15 +84,29 @@ data class ReportPeriod(val label: String, val from: LocalDate?, val to: LocalDa
         (from == null || !date.isBefore(from)) && (to == null || !date.isAfter(to))
 }
 
-data class ReportMerge(val result: List<ReportEntry>, val added: Int, val updated: Int, val unchanged: Int)
+/** [conflicts] = received items that look like existing ones but differ; they are skipped unless the caller replaces them. */
+data class ReportMerge(
+    val result: List<ReportEntry>,
+    val added: Int,
+    val updated: Int,
+    val unchanged: Int,
+    val conflicts: Int = 0
+)
 
 /** Adds received reports to [current] without deleting anything; the same id is overwritten by the received copy. */
-fun mergeReports(current: List<ReportEntry>, incoming: List<ReportEntry>, people: List<Person>): ReportMerge {
+fun mergeReports(
+    current: List<ReportEntry>,
+    incoming: List<ReportEntry>,
+    people: List<Person>,
+    replaceSimilar: Boolean = true,
+    reason: String = ""
+): ReportMerge {
     val ids = people.map { it.id }.toSet()
     val out = current.toMutableList()
     var added = 0
     var updated = 0
     var unchanged = 0
+    var conflicts = 0
     for (raw in incoming) {
         val e = if (raw.personId in ids) raw else {
             val match = people.firstOrNull { raw.personName.isNotBlank() && normalizeFa(it.name) == normalizeFa(raw.personName) }
@@ -104,10 +118,15 @@ fun mergeReports(current: List<ReportEntry>, incoming: List<ReportEntry>, people
             added++
         } else if (out[index] == e) {
             unchanged++
+        } else if (!replaceSimilar) {
+            conflicts++
         } else {
-            out[index] = e
+            // The earlier text is kept inside the notes together with the reason, so nothing is lost.
+            val old = out[index]
+            val trail = if (reason.isBlank()) "" else "\n[جایگزینی: ${reason.trim()}] سابقهٔ قبلی: ${old.title}"
+            out[index] = e.copy(notes = (e.notes + trail).trim())
             updated++
         }
     }
-    return ReportMerge(out, added, updated, unchanged)
+    return ReportMerge(out, added, updated, unchanged, conflicts)
 }

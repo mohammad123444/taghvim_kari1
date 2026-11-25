@@ -31,6 +31,8 @@ import ir.taghvimkari.app.domain.ReportMerge
 import ir.taghvimkari.app.domain.mergeEvaluations
 import ir.taghvimkari.app.domain.mergeReports
 import ir.taghvimkari.app.domain.Person
+import ir.taghvimkari.app.domain.Transfer
+import ir.taghvimkari.app.domain.dedupePeople
 import ir.taghvimkari.app.domain.BACKUP_SNOOZE_DAYS
 import ir.taghvimkari.app.domain.ReportEntry
 import ir.taghvimkari.app.domain.TextSize
@@ -113,6 +115,14 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
 
     var importError: String? by mutableStateOf(null)
         private set
+
+    /** Names that were left out of a received staff list because they were duplicates (shown as an alarm). */
+    var duplicateAlarm: List<String>? by mutableStateOf(null)
+        private set
+
+    fun dismissDuplicateAlarm() {
+        duplicateAlarm = null
+    }
 
     // ------------------------------------------------------------------ text size
     var textSize: TextSize by mutableStateOf(uiPrefs.textSize)
@@ -245,15 +255,18 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
         pendingImport?.let { data ->
             // A backup of an app with no staff must not wipe the staff list of this phone.
             if (data.people.isNotEmpty()) {
-                people = data.people
+                // The new file replaces the list completely (no merging); duplicates inside it are left out.
+                val (unique, dropped) = dedupePeople(data.people)
+                people = unique
                 commit()
+                if (dropped.isNotEmpty()) duplicateAlarm = dropped
             }
             data.reports?.let {
-                reports = mergeReports(reports, it, people).result
+                reports = mergeReports(reports, it, people, replaceSimilar = false).result
                 reportStore.save(reports)
             }
             data.evaluations?.let {
-                evaluations = mergeEvaluations(evaluations, it, people).result
+                evaluations = mergeEvaluations(evaluations, it, people, replaceSimilar = false).result
                 evaluationStore.save(evaluations)
             }
             data.summary?.let {
@@ -339,11 +352,12 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
 
     /** What merging the received reports would do (shown before the user confirms). */
     fun previewReportMerge(incoming: List<ReportEntry>): ReportMerge =
-        mergeReports(reports, incoming, people)
+        mergeReports(reports, incoming, people, replaceSimilar = false)
 
-    fun confirmReportImport() {
+    /** Merges the received reports; similar ones are only replaced when [replaceSimilar] (with a [reason]). */
+    fun confirmReportImport(replaceSimilar: Boolean = false, reason: String = "") {
         pendingReports?.let { incoming ->
-            reports = mergeReports(reports, incoming, people).result
+            reports = mergeReports(reports, incoming, people, replaceSimilar, reason).result
             reportStore.save(reports)
         }
         pendingReports = null
@@ -355,11 +369,12 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
 
     /** What merging the received evaluations would do (shown before the user confirms). */
     fun previewEvaluationMerge(incoming: List<EvaluationEntry>): EvaluationMerge =
-        mergeEvaluations(evaluations, incoming, people)
+        mergeEvaluations(evaluations, incoming, people, replaceSimilar = false)
 
-    fun confirmEvaluationImport() {
+    /** Merges the received evaluations; similar ones are only replaced when [replaceSimilar] (with a [reason]). */
+    fun confirmEvaluationImport(replaceSimilar: Boolean = false, reason: String = "") {
         pendingEvaluations?.let { incoming ->
-            evaluations = mergeEvaluations(evaluations, incoming, people).result
+            evaluations = mergeEvaluations(evaluations, incoming, people, replaceSimilar, reason).result
             evaluationStore.save(evaluations)
         }
         pendingEvaluations = null
@@ -403,6 +418,36 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
                 else -> p
             }
         } + members
+        commit()
+    }
+
+    /** Active / inactive (left the unit): inactive people are hidden from evaluations and new records, never deleted. */
+    fun setActive(id: String, active: Boolean) {
+        people = people.map { if (it.id == id) it.copy(active = active) else it }
+        commit()
+    }
+
+    /** Moves one person to another shift from [from] on; his records and evaluations stay with him. */
+    fun moveToShift(id: String, shiftName: String, leaderId: String?, from: LocalDate) {
+        val p = people.firstOrNull { it.id == id } ?: return
+        val leader = leaderId?.let { lid -> people.firstOrNull { it.id == lid } }
+        val moved = Transfer.move(p, shiftName, leader, from)
+        people = people.map { if (it.id == id) moved else it }
+        commit()
+    }
+
+    /** Two people exchange their shifts from [from] on. */
+    fun swapShifts(aId: String, bId: String, from: LocalDate) {
+        val a = people.firstOrNull { it.id == aId } ?: return
+        val b = people.firstOrNull { it.id == bId } ?: return
+        val (na, nb) = Transfer.swap(a, b, from)
+        people = people.map {
+            when (it.id) {
+                aId -> na
+                bId -> nb
+                else -> it
+            }
+        }
         commit()
     }
 

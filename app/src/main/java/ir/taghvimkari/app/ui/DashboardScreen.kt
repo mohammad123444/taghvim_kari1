@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -84,6 +85,16 @@ fun DashboardScreen(people: List<Person>) {
                 fontWeight = FontWeight.Bold,
                 color = Navy
             )
+            // «امروز»: after browsing other days or months, one tap brings the calendar back to today.
+            val away = viewYear != todayJalali.year || viewMonth != todayJalali.month || selectedEpoch != null
+            Button(
+                onClick = {
+                    viewYear = todayJalali.year
+                    viewMonth = todayJalali.month
+                    selectedEpoch = null
+                },
+                enabled = away
+            ) { Text("امروز") }
         }
         Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
             Row(Modifier.fillMaxWidth().padding(vertical = 18.dp, horizontal = 8.dp)) {
@@ -311,11 +322,7 @@ private fun StatusRow(person: Person, status: DayStatus, color: Color, bucket: B
     ) {
         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(
-                    if (person.isLeader) "${person.name} • سرشیفت" else person.name,
-                    fontWeight = FontWeight.Bold,
-                    color = Navy
-                )
+                PersonNameText(person)
                 Text(statusLine(status), style = MaterialTheme.typography.bodySmall, color = Color.DarkGray)
             }
             Surface(color = color.copy(alpha = .13f), shape = RoundedCornerShape(8.dp)) {

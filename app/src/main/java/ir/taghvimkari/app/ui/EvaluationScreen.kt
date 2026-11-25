@@ -76,7 +76,10 @@ import ir.taghvimkari.app.domain.evaluationPeriods
 import ir.taghvimkari.app.domain.periodKeyOf
 import ir.taghvimkari.app.domain.periodText
 import ir.taghvimkari.app.domain.formatScore
+import ir.taghvimkari.app.domain.MIN_SEARCH_CHARS
+import ir.taghvimkari.app.domain.nameMatches
 import ir.taghvimkari.app.domain.normalizeFa
+import ir.taghvimkari.app.domain.searchTooShort
 import ir.taghvimkari.app.domain.SHIFT_NAMES
 import ir.taghvimkari.app.domain.compareNames
 import ir.taghvimkari.app.domain.shiftRank
@@ -314,8 +317,10 @@ private fun NewEvaluationSection(
     onStart: (evaluatorId: String, personIds: List<String>, fromEpoch: Long, toEpoch: Long) -> Unit
 ) {
     var evaluatorId by rememberSaveable { mutableStateOf("") }
-    var fromEpoch by rememberSaveable { mutableStateOf(LocalDate.now().toEpochDay()) }
-    var toEpoch by rememberSaveable { mutableStateOf(LocalDate.now().toEpochDay()) }
+    // The date boxes start empty (only «از» / «تا»).
+    var fromEpoch by rememberSaveable { mutableStateOf(NO_DATE) }
+    var toEpoch by rememberSaveable { mutableStateOf(NO_DATE) }
+    var leaderPrompt by rememberSaveable { mutableStateOf("") } // leader whose tick asks «alone or with his team?»
     var selectedText by rememberSaveable { mutableStateOf("") }
     var query by rememberSaveable { mutableStateOf("") }
     var picker by rememberSaveable { mutableStateOf(0) } // 0 closed, 1 from, 2 to
@@ -326,15 +331,16 @@ private fun NewEvaluationSection(
     // Everybody can evaluate: the evaluator is chosen from all active people.
     val evaluatorOptions = remember(people) { uniqueLabels(people.filter { it.active }) }
     val evaluator = people.firstOrNull { it.id == evaluatorId && it.active }
-    val fromDate = LocalDate.ofEpochDay(fromEpoch)
-    val toDate = LocalDate.ofEpochDay(toEpoch)
+    val datesChosen = fromEpoch != NO_DATE && toEpoch != NO_DATE
+    val fromDate = LocalDate.ofEpochDay(if (fromEpoch == NO_DATE) LocalDate.now().toEpochDay() else fromEpoch)
+    val toDate = LocalDate.ofEpochDay(if (toEpoch == NO_DATE) LocalDate.now().toEpochDay() else toEpoch)
 
     // Anyone active except the evaluator himself; a team is shown together (leader first).
     val leaderNames = remember(people) { people.filter { it.isLeader }.associate { it.id to it.name } }
     val candidates = remember(people, evaluatorId) { people.filter { it.active && it.id != evaluatorId } }
     val q = normalizeFa(query)
     val shown = candidates
-        .filter { q.isBlank() || normalizeFa(it.name).contains(q) }
+        .filter { nameMatches(it.name, query) }
         .sortedByTeam(leaderNames) { it }
     val candidateIds = candidates.map { it.id }.toSet()
     val selected = selectedText.split(",").filter { it in candidateIds }.toSet()
@@ -360,10 +366,10 @@ private fun NewEvaluationSection(
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { picker = 1 }, modifier = Modifier.weight(1f)) {
-                    Text("از: ${JalaliDate.from(fromDate).display()}")
+                    Text(dateBoxText("از", fromEpoch))
                 }
                 OutlinedButton(onClick = { picker = 2 }, modifier = Modifier.weight(1f)) {
-                    Text("تا: ${JalaliDate.from(toDate).display()}")
+                    Text(dateBoxText("تا", toEpoch))
                 }
             }
         }
@@ -376,28 +382,33 @@ private fun NewEvaluationSection(
     ) {
         OutlinedTextField(
             value = query, onValueChange = { query = it },
-            label = { Text("جستجوی نام") }, singleLine = true,
-            modifier = Modifier.fillMaxWidth()
+            label = { Text("جستجوی نام (حداقل ${MIN_SEARCH_CHARS.toPersian()} حرف)") }, singleLine = true,
+            modifier = Modifier.fillMaxWidth().keepVisibleWhenFocused()
         )
         Row(Modifier.horizontalScroll(rememberScrollState())) {
-            TextButton(onClick = { selectedText = (selected + shown.map { it.id }).joinToString(",") }) { Text("همهٔ نتایج") }
+            TextButton(onClick = { selectedText = (selected + shown.map { it.id }).joinToString(",") }) { Text("انتخاب همه") }
             TextButton(onClick = {
                 selectedText = candidates.filter { draftOf(it)?.isComplete == false }.joinToString(",") { it.id }
             }) { Text("فقط ناتمام‌ها") }
             TextButton(onClick = { selectedText = "" }) { Text("هیچ‌کدام") }
         }
         if (shown.isEmpty()) {
-            Text("نیرویی پیدا نشد.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+            Text(
+                if (searchTooShort(query)) "برای جستجو حداقل ${MIN_SEARCH_CHARS.toPersian()} حرف بنویسید." else "نیرویی پیدا نشد.",
+                color = Color.Gray,
+                style = MaterialTheme.typography.bodySmall
+            )
         }
         val open = openGroups.split(",").toSet()
-        Employment.entries.forEach { emp ->
-            Category.entries.forEach { cat ->
-                val members = shown.filter { it.employment == emp && it.category == cat }
-                if (members.isEmpty() && q.isNotBlank()) return@forEach
-                val key = "${emp.name}-${cat.name}"
+        // Folds by shift name (A, B, C, D, none) and, inside, by employment.
+        (SHIFT_NAMES + "").forEach { shiftKey ->
+            Employment.entries.forEach { emp ->
+                val members = shown.filter { it.shiftName == shiftKey && it.employment == emp }
+                if (members.isEmpty()) return@forEach
+                val key = "$shiftKey-${emp.name}"
                 val expanded = key in open || q.isNotBlank()
                 FoldGroup(
-                    title = "${emp.title} • ${cat.title}",
+                    title = (if (shiftKey.isEmpty()) "بدون شیفت" else "شیفت $shiftKey") + " • ${emp.title}",
                     accent = employmentColor(emp),
                     total = members.size,
                     selectedCount = members.count { it.id in selected },
@@ -410,26 +421,27 @@ private fun NewEvaluationSection(
                 ) {
                     members.forEach { p ->
                         val isMember = p.leaderId != null && !p.isLeader
-                        val teamIds: Set<String> = if (p.isLeader) {
-                            (candidates.filter { it.leaderId == p.id }.map { it.id } + p.id).filter { it in candidateIds }.toSet()
-                        } else {
-                            setOf(p.id)
-                        }
-                        val checked = teamIds.isNotEmpty() && teamIds.all { it in selected }
+                        val checked = p.id in selected
+                        val hasMembers = p.isLeader && candidates.any { it.leaderId == p.id }
                         val draft = draftOf(p)
                         Row(
                             Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
                                 .clickable {
-                                    selectedText = (if (checked) selected - teamIds else selected + teamIds).joinToString(",")
+                                    when {
+                                        checked -> selectedText = (selected - p.id).joinToString(",")
+                                        // Ticking a shift leader asks: only him, or with all his members?
+                                        hasMembers -> leaderPrompt = p.id
+                                        else -> selectedText = (selected + p.id).joinToString(",")
+                                    }
                                 }
                                 .padding(start = if (isMember) 18.dp else 0.dp, top = 2.dp, bottom = 2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Checkbox(checked = checked, onCheckedChange = null)
                             Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                                Text(if (p.isLeader) "${p.name} • سرشیفت (با زیرمجموعه)" else p.name, fontWeight = FontWeight.Bold, color = Navy)
+                                PersonNameText(p)
                                 val status = when {
                                     draft == null -> if (p.shiftName.isNotBlank()) "شیفت ${p.shiftName}" else ""
                                     draft.isComplete -> "در این دوره ارزیابی شده (${formatScore(draft.finalScore)})"
@@ -455,11 +467,12 @@ private fun NewEvaluationSection(
         val resuming = chosen.count { draftOf(it)?.isComplete == false }
         Button(
             onClick = { onStart(evaluator.id, chosen.map { it.id }, fromEpoch, toEpoch) },
-            enabled = chosen.isNotEmpty(),
+            enabled = chosen.isNotEmpty() && datesChosen,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
-                if (chosen.isEmpty()) "ابتدا نفرات را تیک بزنید"
+                if (!datesChosen) "ابتدا تاریخ «از» و «تا» را انتخاب کنید"
+                else if (chosen.isEmpty()) "ابتدا نفرات را تیک بزنید"
                 else "شروع ارزیابی (${chosen.size.toPersian()} نفر" +
                     (if (resuming > 0) "، ${resuming.toPersian()} ادامه" else "") + ")"
             )
@@ -474,12 +487,38 @@ private fun NewEvaluationSection(
             onPick = { d ->
                 if (picker == 1) {
                     fromEpoch = d.toEpochDay()
-                    if (toEpoch < fromEpoch) toEpoch = fromEpoch
+                    if (toEpoch != NO_DATE && toEpoch < fromEpoch) toEpoch = fromEpoch
                 } else {
                     toEpoch = d.toEpochDay()
-                    if (fromEpoch > toEpoch) fromEpoch = toEpoch
+                    if (fromEpoch != NO_DATE && fromEpoch > toEpoch) fromEpoch = toEpoch
                 }
                 picker = 0
+            }
+        )
+    }
+
+    // ----- tick of a shift leader: only him, or with all his members
+    val promptLeader = candidates.firstOrNull { it.id == leaderPrompt }
+    if (promptLeader != null) {
+        val teamIds = candidates.filter { it.leaderId == promptLeader.id }.map { it.id }
+        AlertDialog(
+            onDismissRequest = { leaderPrompt = "" },
+            title = { Text("انتخاب سرشیفت", fontWeight = FontWeight.Bold) },
+            text = { Text("«${promptLeader.name}» سرشیفت است. فقط خودش ارزیابی شود یا با همهٔ ${teamIds.size.toPersian()} نفر زیرمجموعه‌اش؟") },
+            confirmButton = {
+                TextButton(onClick = {
+                    selectedText = (selected + promptLeader.id + teamIds).joinToString(",")
+                    leaderPrompt = ""
+                }) { Text("با همهٔ زیرمجموعه", fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        selectedText = (selected + promptLeader.id).joinToString(",")
+                        leaderPrompt = ""
+                    }) { Text("فقط خودش") }
+                    TextButton(onClick = { leaderPrompt = "" }) { Text("انصراف") }
+                }
             }
         )
     }
@@ -879,7 +918,7 @@ private fun ResultsSection(
     var evaluatorFilter by rememberSaveable { mutableStateOf("") }
     var periodFilter by rememberSaveable { mutableStateOf("") } // key of the evaluation period, blank = all
 
-    val labelled = remember(people) { uniqueLabels(people) }
+    val labelled = remember(people) { uniqueLabels(people).map { (p, n) -> p to if (p.active) n else "$n (غیرفعال)" } }
     val evaluatorIds = remember(evaluations) { evaluations.map { it.evaluatorId }.filter { it.isNotBlank() }.distinct() }
     val nameById = remember(people) { people.associate { it.id to it.name } }
     val rankById = remember(people) { people.associate { it.id to it.shiftRank } }
@@ -1177,17 +1216,18 @@ private fun AdvancedReportSection(people: List<Person>, evaluations: List<Evalua
     val context = LocalContext.current
     val today = LocalDate.now().toEpochDay()
     // The first dates are remembered so the box can tell when the person has changed them (a filter is on).
-    val defaultFrom = rememberSaveable { evaluations.minOfOrNull { it.date.toEpochDay() } ?: today }
-    val defaultTo = rememberSaveable { evaluations.maxOfOrNull { it.dateTo.toEpochDay() } ?: today }
-    var fromEpoch by rememberSaveable { mutableStateOf(defaultFrom) }
-    var toEpoch by rememberSaveable { mutableStateOf(defaultTo) }
+    // Empty date boxes mean "no limit": only «از» / «تا» are shown until a date is chosen.
+    val defaultFrom = NO_DATE
+    val defaultTo = NO_DATE
+    var fromEpoch by rememberSaveable { mutableStateOf(NO_DATE) }
+    var toEpoch by rememberSaveable { mutableStateOf(NO_DATE) }
     var empText by rememberSaveable { mutableStateOf(Employment.entries.joinToString(",") { it.name }) }
     var catText by rememberSaveable { mutableStateOf(Category.entries.joinToString(",") { it.name }) }
     var shiftText by rememberSaveable { mutableStateOf((SHIFT_NAMES + "-").joinToString(",")) }
     var picker by rememberSaveable { mutableStateOf(0) } // 0 closed, 1 from, 2 to
 
-    val fromDate = LocalDate.ofEpochDay(fromEpoch)
-    val toDate = LocalDate.ofEpochDay(toEpoch)
+    val fromDate = if (fromEpoch == NO_DATE) (evaluations.minOfOrNull { it.date } ?: LocalDate.now()) else LocalDate.ofEpochDay(fromEpoch)
+    val toDate = if (toEpoch == NO_DATE) (evaluations.maxOfOrNull { it.dateTo } ?: LocalDate.now()) else LocalDate.ofEpochDay(toEpoch)
     val emps = empText.split(",").toSet()
     val cats = catText.split(",").toSet()
     val shifts = shiftText.split(",").toSet()
@@ -1226,10 +1266,10 @@ private fun AdvancedReportSection(people: List<Person>, evaluations: List<Evalua
     FoldBox("فیلتر گزارش", active = filterOn) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { picker = 1 }, modifier = Modifier.weight(1f)) {
-                    Text("از: ${JalaliDate.from(fromDate).display()}")
+                    Text(dateBoxText("از", fromEpoch))
                 }
                 OutlinedButton(onClick = { picker = 2 }, modifier = Modifier.weight(1f)) {
-                    Text("تا: ${JalaliDate.from(toDate).display()}")
+                    Text(dateBoxText("تا", toEpoch))
                 }
             }
             MultiChips("وضعیت استخدامی", Employment.entries.map { it.name to it.title }, empText) { empText = it }
@@ -1305,10 +1345,10 @@ private fun AdvancedReportSection(people: List<Person>, evaluations: List<Evalua
             onPick = { d ->
                 if (picker == 1) {
                     fromEpoch = d.toEpochDay()
-                    if (toEpoch < fromEpoch) toEpoch = fromEpoch
+                    if (toEpoch != NO_DATE && toEpoch < fromEpoch) toEpoch = fromEpoch
                 } else {
                     toEpoch = d.toEpochDay()
-                    if (fromEpoch > toEpoch) fromEpoch = toEpoch
+                    if (fromEpoch != NO_DATE && fromEpoch > toEpoch) fromEpoch = toEpoch
                 }
                 picker = 0
             }

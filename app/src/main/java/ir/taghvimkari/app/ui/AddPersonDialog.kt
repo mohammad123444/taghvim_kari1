@@ -48,6 +48,10 @@ fun AddPersonDialog(
     initial: Person? = null,
     /** Number of existing members when editing a leader. */
     memberCount: Int = 0,
+    /** Names of the existing members when editing a leader; always listed under the leader. */
+    existingMembers: List<String> = emptyList(),
+    /** Opens the transfer (جابجایی شیفت) dialog; only offered when editing. */
+    onTransfer: (() -> Unit)? = null,
     /** Only offered when editing; the caller asks for confirmation before really deleting. */
     onDelete: (() -> Unit)? = null,
     onDismiss: () -> Unit,
@@ -65,6 +69,8 @@ fun AddPersonDialog(
     var membersText by rememberSaveable { mutableStateOf("") }
     var showPicker by rememberSaveable { mutableStateOf(false) }
     var showErrors by remember { mutableStateOf(false) }
+    var active by rememberSaveable { mutableStateOf(initial?.active ?: true) }
+    var confirmDelete by rememberSaveable { mutableStateOf(false) }
 
     val startDate = LocalDate.ofEpochDay(startEpochDay)
     val memberNames = membersText.lines().map { it.trim() }.filter { it.isNotEmpty() }
@@ -100,6 +106,27 @@ fun AddPersonDialog(
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("این فرد سرشیفت است", Modifier.weight(1f), fontWeight = FontWeight.Bold)
                     Switch(checked = isLeader, onCheckedChange = { isLeader = it })
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(if (active) "فعال" else "غیرفعال", fontWeight = FontWeight.Bold)
+                        Text(
+                            "اگر از واحد رفته یا دیگر در سازمان نیست، غیرفعال کنید؛ در ارزیابی و ثبت سابقهٔ جدید نمایش داده نمی‌شود اما اطلاعاتش حذف نمی‌شود و در گزارش‌ها هست.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
+                    Switch(checked = active, onCheckedChange = { active = it })
+                }
+                if (initial != null && onTransfer != null) {
+                    OutlinedButton(onClick = onTransfer, modifier = Modifier.fillMaxWidth()) { Text("جابجایی به شیفت دیگر") }
+                }
+                if (initial != null && initial.isLeader && existingMembers.isNotEmpty()) {
+                    // The members always stay listed right under their shift leader.
+                    Text("زیرمجموعه‌های ${initial.name}", fontWeight = FontWeight.Bold, color = LeaderNameColor)
+                    existingMembers.forEach { n ->
+                        Text("• $n", Modifier.padding(start = 12.dp), color = MemberNameColor, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
                 if (initial != null && initial.isLeader && memberCount > 0) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -144,7 +171,7 @@ fun AddPersonDialog(
                         pattern = pattern,
                         startDate = startDate,
                         startWeekday = weekday,
-                        active = initial?.active ?: true,
+                        active = active,
                         isLeader = isLeader,
                         leaderId = initial?.leaderId,
                         category = category,
@@ -178,12 +205,31 @@ fun AddPersonDialog(
         dismissButton = {
             Row {
                 if (initial != null && onDelete != null) {
-                    TextButton(onClick = onDelete) { Text("حذف", color = Color.Red, fontWeight = FontWeight.Bold) }
+                    TextButton(onClick = { confirmDelete = true }) { Text("حذف", color = Color.Red, fontWeight = FontWeight.Bold) }
                 }
                 TextButton(onClick = onDismiss) { Text("انصراف") }
             }
         }
     )
+
+    if (confirmDelete && onDelete != null) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("حذف نیرو", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "آیا مطمئنی که «${name.trim().ifBlank { initial?.name.orEmpty() }}» حذف شود؟" +
+                        if (initial?.isLeader == true && memberCount > 0) " زیرمجموعه‌های او حذف نمی‌شوند." else ""
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { confirmDelete = false; onDelete() }) {
+                    Text("بله، حذف شود", color = Color.Red, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("نه") } }
+        )
+    }
 
     if (showPicker) {
         JalaliDatePickerDialog(

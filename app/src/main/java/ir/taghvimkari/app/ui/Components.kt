@@ -104,11 +104,10 @@ fun PersonCard(person: Person, status: DayStatus? = null, leaderName: String? = 
         Column(Modifier.fillMaxWidth()) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(
-                        if (person.isLeader) "${person.name} • سرشیفت" else person.name,
-                        fontWeight = FontWeight.Bold,
-                        color = Navy
-                    )
+                    PersonNameText(person)
+                    if (!person.active) {
+                        Text("غیرفعال (از واحد رفته)", style = MaterialTheme.typography.labelMedium, color = Color(0xFFB3261E), fontWeight = FontWeight.Bold)
+                    }
                     if (leaderName != null) {
                         Text("زیرمجموعهٔ $leaderName", style = MaterialTheme.typography.bodySmall, color = Purple)
                     }

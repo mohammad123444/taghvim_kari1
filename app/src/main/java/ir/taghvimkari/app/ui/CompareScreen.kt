@@ -46,7 +46,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.sp
 import ir.taghvimkari.app.domain.JalaliDate
+import ir.taghvimkari.app.domain.MIN_SEARCH_CHARS
 import ir.taghvimkari.app.domain.Person
+import ir.taghvimkari.app.domain.nameMatches
 import ir.taghvimkari.app.domain.Shift
 import ir.taghvimkari.app.domain.ShiftEngine
 import ir.taghvimkari.app.domain.sortedByTeam
@@ -107,15 +109,18 @@ fun CompareScreen(people: List<Person>) {
     // The name column grows with the text size so names and counts are not cut.
     val nameWidth = NAME_WIDTH * LocalDensity.current.fontScale.coerceIn(1f, 1.5f)
     var selectedText by rememberSaveable { mutableStateOf("") }
-    var fromEpoch by rememberSaveable { mutableStateOf(today.toEpochDay()) }
-    var toEpoch by rememberSaveable { mutableStateOf(today.plusDays(13).toEpochDay()) }
+    // The date boxes start empty (only «از» / «تا»).
+    var fromEpoch by rememberSaveable { mutableStateOf(NO_DATE) }
+    var toEpoch by rememberSaveable { mutableStateOf(NO_DATE) }
     var picker by rememberSaveable { mutableStateOf(0) } // 0 = closed, 1 = from, 2 = to
     var showPeople by rememberSaveable { mutableStateOf(false) }
 
-    val from = LocalDate.ofEpochDay(fromEpoch)
-    val to = LocalDate.ofEpochDay(toEpoch)
-    val days = (toEpoch - fromEpoch + 1).toInt()
+    val datesSet = fromEpoch != NO_DATE && toEpoch != NO_DATE
+    val from = LocalDate.ofEpochDay(if (fromEpoch == NO_DATE) today.toEpochDay() else fromEpoch)
+    val to = LocalDate.ofEpochDay(if (toEpoch == NO_DATE) today.toEpochDay() else toEpoch)
+    val days = if (datesSet) (toEpoch - fromEpoch + 1).toInt() else 0
     val error: String? = when {
+        !datesSet -> "تاریخ «از» و «تا» را انتخاب کنید."
         days < 1 -> "تاریخ پایان نباید قبل از تاریخ شروع باشد."
         days > MAX_DAYS -> "حداکثر طول بازه ${MAX_DAYS.toPersian()} روز است."
         else -> null
@@ -168,10 +173,10 @@ fun CompareScreen(people: List<Person>) {
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { picker = 1 }, modifier = Modifier.weight(1f)) {
-                Text("از: ${JalaliDate.from(from).display()}")
+                Text(dateBoxText("از", fromEpoch))
             }
             OutlinedButton(onClick = { picker = 2 }, modifier = Modifier.weight(1f)) {
-                Text("تا: ${JalaliDate.from(to).display()}")
+                Text(dateBoxText("تا", toEpoch))
             }
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -179,7 +184,10 @@ fun CompareScreen(people: List<Person>) {
                 Surface(
                     color = Purple.copy(alpha = .12f),
                     shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier.clip(RoundedCornerShape(20.dp)).clickable { toEpoch = fromEpoch + n - 1 }
+                    modifier = Modifier.clip(RoundedCornerShape(20.dp)).clickable {
+                        if (fromEpoch == NO_DATE) fromEpoch = today.toEpochDay()
+                        toEpoch = fromEpoch + n - 1
+                    }
                 ) {
                     Text(
                         label,
@@ -302,7 +310,7 @@ fun CompareScreen(people: List<Person>) {
             onPick = { d ->
                 if (picker == 1) {
                     fromEpoch = d.toEpochDay()
-                    if (toEpoch < fromEpoch) toEpoch = fromEpoch
+                    if (toEpoch != NO_DATE && toEpoch < fromEpoch) toEpoch = fromEpoch
                 } else {
                     toEpoch = d.toEpochDay()
                 }
@@ -405,7 +413,7 @@ private fun PeoplePickerDialog(
     var draft by remember { mutableStateOf(initial) }
     var query by remember { mutableStateOf("") }
     val leaderNames = remember(people) { people.filter { it.isLeader }.associate { it.id to it.name } }
-    val shown = people.filter { it.name.contains(query.trim(), ignoreCase = true) }.sortedByTeam(leaderNames) { it }
+    val shown = people.filter { nameMatches(it.name, query) }.sortedByTeam(leaderNames) { it }
 
     FormDialog(
         onDismiss = onDismiss,
@@ -414,11 +422,11 @@ private fun PeoplePickerDialog(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 OutlinedTextField(
                     value = query, onValueChange = { query = it },
-                    label = { Text("جستجو") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    label = { Text("جستجو (حداقل ${MIN_SEARCH_CHARS.toPersian()} حرف)") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().keepVisibleWhenFocused()
                 )
                 Row {
-                    TextButton(onClick = { draft = draft + shown.map { it.id } }) { Text("همهٔ نتایج") }
+                    TextButton(onClick = { draft = draft + shown.map { it.id } }) { Text("انتخاب همه") }
                     TextButton(onClick = { draft = emptySet() }) { Text("هیچ‌کدام") }
                 }
                 Text(
@@ -427,7 +435,7 @@ private fun PeoplePickerDialog(
                     color = Color.Gray
                 )
                 Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
-                    shown.forEach { p ->
+                    ShiftEmploymentFolds(items = shown, person = { it }, stateKey = "compare", forceOpen = query.isNotBlank()) { p ->
                         val checked = p.id in draft
                         val isMember = p.leaderId != null && !p.isLeader
                         Row(
@@ -446,7 +454,7 @@ private fun PeoplePickerDialog(
                         ) {
                             Checkbox(checked = checked, onCheckedChange = null)
                             Column(Modifier.padding(start = 8.dp)) {
-                                Text(if (p.isLeader) "${p.name} • سرشیفت" else p.name, fontWeight = FontWeight.Bold)
+                                PersonNameText(p)
                                 Text(
                                     "${p.employment.title} • ${p.category.title}",
                                     style = MaterialTheme.typography.labelSmall,

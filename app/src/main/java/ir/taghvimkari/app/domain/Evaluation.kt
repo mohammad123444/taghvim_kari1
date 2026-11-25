@@ -51,7 +51,9 @@ data class EvaluationEntry(
     val date: LocalDate,
     val scores: List<Int>,
     /** Last day of the evaluation period; old saves had a single date, which is both start and end. */
-    val dateTo: LocalDate = date
+    val dateTo: LocalDate = date,
+    /** Why this evaluation replaced an earlier one (filled when a received file replaced a similar evaluation). */
+    val note: String = ""
 ) {
     /** Identifies the evaluation period, e.g. to send only one period. */
     val periodKey: String get() = periodKeyOf(date, dateTo)
@@ -105,7 +107,14 @@ object Evaluations {
     }
 }
 
-data class EvaluationMerge(val result: List<EvaluationEntry>, val added: Int, val updated: Int, val unchanged: Int)
+/** [conflicts] = received evaluations of the same person / evaluator / period with different scores (skipped unless replaced). */
+data class EvaluationMerge(
+    val result: List<EvaluationEntry>,
+    val added: Int,
+    val updated: Int,
+    val unchanged: Int,
+    val conflicts: Int = 0
+)
 
 /**
  * Adds evaluations received from another person to [current] without deleting anything.
@@ -116,7 +125,9 @@ data class EvaluationMerge(val result: List<EvaluationEntry>, val added: Int, va
 fun mergeEvaluations(
     current: List<EvaluationEntry>,
     incoming: List<EvaluationEntry>,
-    people: List<Person>
+    people: List<Person>,
+    replaceSimilar: Boolean = true,
+    reason: String = ""
 ): EvaluationMerge {
     val ids = people.map { it.id }.toSet()
     fun resolve(id: String, name: String): String =
@@ -127,6 +138,7 @@ fun mergeEvaluations(
     var added = 0
     var updated = 0
     var unchanged = 0
+    var conflicts = 0
     for (raw in incoming) {
         val e = raw.copy(
             personId = resolve(raw.personId, raw.personName),
@@ -145,14 +157,16 @@ fun mergeEvaluations(
         val moreComplete = (e.isComplete && !old.isComplete) || (e.isComplete == old.isComplete && e.doneCount > old.doneCount)
         val lessComplete = old.isComplete && !e.isComplete
         val take = e.scores != old.scores && (moreComplete || (byId >= 0 && !lessComplete))
-        if (take) {
-            out[index] = e.copy(id = old.id)
+        if (take && !replaceSimilar) {
+            conflicts++
+        } else if (take) {
+            out[index] = e.copy(id = old.id, note = reason.trim().ifBlank { e.note })
             updated++
         } else {
             unchanged++
         }
     }
-    return EvaluationMerge(out, added, updated, unchanged)
+    return EvaluationMerge(out, added, updated, unchanged, conflicts)
 }
 
 /** 38.347 -> "۳۸٫۳۵" */
