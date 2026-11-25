@@ -121,7 +121,7 @@ private fun PeopleExchange(people: List<Person>, context: android.content.Contex
         }
         if (selected.isNotEmpty()) {
             FoldBox("نمایش نام‌ها") {
-                selected.sortedByShiftName().forEach { Text("• ${it.name}") }
+                selected.sortedByShiftName().forEach { StyledName("• ${it.name}", it.isMember) }
             }
         }
     }
@@ -160,6 +160,7 @@ private fun ReportsExchange(
     val labelled = remember(people) { uniqueLabels(people).map { (p, n) -> p to if (p.active) n else "$n (غیرفعال)" } }
     val nameById = remember(people) { people.associate { it.id to it.name } }
     val rankById = remember(people) { people.associate { it.id to it.shiftRank } }
+    val memberIds = remember(people) { people.filter { it.isMember }.map { it.id }.toSet() }
     val nameOf: (ReportEntry) -> String = { e -> nameById[e.personId] ?: e.personName }
 
     val period = remember(mode, customFrom, customTo) { periodFor(mode, todayJalali, customFrom, customTo) }
@@ -218,7 +219,7 @@ private fun ReportsExchange(
                 color = Color.Gray
             )
             FoldBox("به تفکیک نفر") {
-                perPerson.forEach { (_, name, count) -> Text("• $name: ${count.toPersian()} سابقه") }
+                perPerson.forEach { (id, name, count) -> StyledName("• $name: ${count.toPersian()} سابقه", id in memberIds) }
             }
         } else {
             Text("با این انتخاب سابقه‌ای پیدا نشد.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
@@ -287,6 +288,7 @@ private fun EvaluationFileExchange(
     val labelled = remember(people) { uniqueLabels(people).map { (p, n) -> p to if (p.active) n else "$n (غیرفعال)" } }
     val nameById = remember(people) { people.associate { it.id to it.name } }
     val rankById = remember(people) { people.associate { it.id to it.shiftRank } }
+    val memberIds = remember(people) { people.filter { it.isMember }.map { it.id }.toSet() }
     val nameOf: (EvaluationEntry) -> String = { e -> nameById[e.personId] ?: e.personName }
     val evaluatorList = remember(evaluations, people) {
         evaluations.map { it.evaluatorId }.filter { it.isNotBlank() }.distinct()
@@ -295,7 +297,7 @@ private fun EvaluationFileExchange(
     }
     val evaluatorLabels = remember(evaluatorList) { numberedLabels(evaluatorList.map { it.second }) }
     val periods = remember(evaluations) { evaluationPeriods(evaluations) }
-    val periodLabels = remember(periods) { periods.map { periodText(it.first, it.second) } }
+    val periodLabels = remember(periods, evaluations, nameById) { periodLabelsWithEvaluators(periods, evaluations, nameById) }
     val periodIndex = periods.indexOfFirst { periodKeyOf(it.first, it.second) == periodFilter }
 
     val filtered = evaluations
@@ -344,7 +346,7 @@ private fun EvaluationFileExchange(
                 Text("${incomplete.toPersian()} مورد ناتمام است.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             }
             FoldBox("به تفکیک نفر") {
-                perPerson.forEach { (_, name, count) -> Text("• $name: ${count.toPersian()} ارزیابی") }
+                perPerson.forEach { (id, name, count) -> StyledName("• $name: ${count.toPersian()} ارزیابی", id in memberIds) }
             }
         } else {
             Text(

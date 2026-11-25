@@ -248,9 +248,9 @@ fun CompareScreen(people: List<Person>) {
                             Column(Modifier.width(nameWidth)) {
                                 Text(
                                     if (row.person.isLeader) "★ ${row.person.name}" else row.person.name,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Navy,
+                                    fontSize = if (row.person.isMember) 11.sp else 13.sp,
+                                    fontWeight = if (row.person.isMember) FontWeight.Normal else FontWeight.Bold,
+                                    color = if (row.person.isMember) MemberNameColor else LeaderNameColor,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )

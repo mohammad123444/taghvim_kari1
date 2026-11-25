@@ -173,7 +173,7 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
         }
 
         // Search and send / receive stay folded until needed; the dot shows while a search is on.
-        FoldBox("جستجو و ارسال/دریافت", active = query.isNotBlank() || showInactive) {
+        FoldBox("جستجوی پیشرفته", active = query.isNotBlank() || showInactive) {
             OutlinedTextField(
                 value = query, onValueChange = { query = it },
                 label = { Text("جستجوی نام (حداقل ${MIN_SEARCH_CHARS.toPersian()} حرف)") }, singleLine = true,
@@ -240,9 +240,9 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
                                         NAME_W,
                                         r.person.name + (if (r.person.shiftName.isNotBlank()) " (${r.person.shiftName})" else "") +
                                             (if (!r.person.active) " • غیرفعال" else ""),
-                                        if (r.person.isLeader) LeaderNameColor else MemberNameColor,
-                                        bold = r.person.isLeader, align = TextAlign.Start,
-                                        fontSize = if (r.person.isLeader) 15.sp else 12.sp
+                                        if (r.person.isMember) MemberNameColor else LeaderNameColor,
+                                        bold = !r.person.isMember, align = TextAlign.Start,
+                                        fontSize = if (r.person.isMember) 12.sp else 15.sp
                                     )
                                     SummaryCellBox(COL_W, formatNumber(r.total), Navy, bold = true, bg = Navy.copy(alpha = .08f))
                                     SummaryCellBox(

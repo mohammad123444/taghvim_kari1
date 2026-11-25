@@ -545,15 +545,6 @@ private fun FoldGroup(
                     enabled = total > 0
                 )
                 Text(title, Modifier.weight(1f), fontWeight = FontWeight.Bold, color = accent)
-                Surface(color = accent, shape = RoundedCornerShape(12.dp)) {
-                    Text(
-                        "${selectedCount.toPersian()}/${total.toPersian()}",
-                        Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                }
                 Text(if (expanded) "▲" else "▼", Modifier.padding(start = 10.dp), color = accent)
             }
             if (expanded) {
@@ -652,6 +643,19 @@ private fun ChoiceChips(options: List<String>, selected: Int, onSelect: (Int) ->
             }
         }
     }
+}
+
+/** «از … تا … • ارزیاب: …»: each evaluation period in the filter also names who evaluated in it. */
+internal fun periodLabelsWithEvaluators(
+    periods: List<Pair<LocalDate, LocalDate>>,
+    evaluations: List<EvaluationEntry>,
+    nameById: Map<String, String>
+): List<String> = periods.map { (from, to) ->
+    val names = evaluations.filter { it.date == from && it.dateTo == to }
+        .map { nameById[it.evaluatorId] ?: it.evaluatorName }
+        .filter { it.isNotBlank() }
+        .distinct()
+    periodText(from, to) + if (names.isEmpty()) "" else " • ارزیاب: " + names.joinToString("، ")
 }
 
 /** Equal names get a number so each label is unique. */
@@ -877,6 +881,7 @@ private fun ResultsSection(
     val evaluatorIds = remember(evaluations) { evaluations.map { it.evaluatorId }.filter { it.isNotBlank() }.distinct() }
     val nameById = remember(people) { people.associate { it.id to it.name } }
     val rankById = remember(people) { people.associate { it.id to it.shiftRank } }
+    val memberIds = remember(people) { people.filter { it.isMember }.map { it.id }.toSet() }
     val evaluatorList = remember(evaluations, people) {
         evaluatorIds
             .map { id -> id to (nameById[id] ?: evaluations.firstOrNull { it.evaluatorId == id }?.evaluatorName.orEmpty()) }
@@ -885,7 +890,7 @@ private fun ResultsSection(
     val evaluatorLabels = remember(evaluatorList) { numberedLabels(evaluatorList.map { it.second }) }
     val nameOf: (EvaluationEntry) -> String = { e -> nameById[e.personId] ?: e.personName }
     val periods = remember(evaluations) { evaluationPeriods(evaluations) }
-    val periodLabels = remember(periods) { periods.map { periodText(it.first, it.second) } }
+    val periodLabels = remember(periods, evaluations, nameById) { periodLabelsWithEvaluators(periods, evaluations, nameById) }
     val periodIndex = periods.indexOfFirst { periodKeyOf(it.first, it.second) == periodFilter }
 
     val filtered = evaluations
@@ -972,7 +977,7 @@ private fun ResultsSection(
                 drafts.forEach { e ->
                     Column(Modifier.fillMaxWidth().clickable { onResume(e) }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(nameOf(e), Modifier.weight(1f), fontWeight = FontWeight.Bold, color = Navy)
+                            StyledName(nameOf(e), e.personId in memberIds, Modifier.weight(1f))
                             Text("ادامه", color = Purple, fontWeight = FontWeight.Bold)
                         }
                         ScoreBar(e.doneCount.toDouble() / EvaluationItems.count, DraftOrange, 8)
@@ -989,33 +994,18 @@ private fun ResultsSection(
 
     if (done.isEmpty()) return
 
-    // ----- overall summary
-    val average = Evaluations.average(done)
-    val level = Evaluations.levelOf(average)
-    AppCard(verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("میانگین نمرهٔ نهایی", color = Purple, fontWeight = FontWeight.Bold)
-            ScoreBadge(average, big = true)
-            ScoreBar(average / EvaluationItems.FINAL_MAX, levelColor(level), 12)
-            Text(
-                "${done.size.toPersian()} ارزیابی کامل • سطح: ${level.title}",
-                color = Color.Gray,
-                style = MaterialTheme.typography.bodySmall
-            )
-    }
-
     // ----- per person
     if (personFilter.isBlank()) {
         val perPerson = done.groupBy { it.personId }
             .map { (id, list) -> Triple(id, nameOf(list.first()), list) }
             .sortedWith(compareBy<Triple<String, String, List<EvaluationEntry>>> { rankById[it.first] ?: 9 }.thenByDescending { Evaluations.average(it.third) })
-        AppCard(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("میانگین هر نفر", fontWeight = FontWeight.Bold, color = Navy, style = MaterialTheme.typography.titleMedium)
+        FoldBox("میانگین هر نفر") {
                 perPerson.forEach { (id, name, list) ->
                     val avg = Evaluations.average(list)
                     val lvl = Evaluations.levelOf(avg)
                     Column(Modifier.fillMaxWidth().clickable { personFilter = id }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(name, Modifier.weight(1f), fontWeight = FontWeight.Bold, color = Navy)
+                            StyledName(name, id in memberIds, Modifier.weight(1f))
                             Text(
                                 "${formatScore(avg)} از ${EvaluationItems.FINAL_MAX.toPersian()}",
                                 fontWeight = FontWeight.Bold,
@@ -1082,7 +1072,7 @@ private fun ResultsSection(
                                 Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
-                                            Text(nameOf(e), fontWeight = FontWeight.Bold, color = Navy)
+                                            StyledName(nameOf(e), e.personId in memberIds)
                                             Text(e.periodText(), color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                                         }
                                         Text(
@@ -1263,7 +1253,7 @@ internal fun AdvancedReportSection(people: List<Person>, evaluations: List<Evalu
                     val color = levelColor(Evaluations.levelOf(pa.average))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(pa.person.name, fontWeight = FontWeight.Bold, color = Navy)
+                            StyledName(pa.person.name, pa.person.isMember)
                             Text(
                                 (if (pa.person.shiftName.isNotBlank()) "شیفت ${pa.person.shiftName} • " else "") +
                                     "${pa.person.employment.title} • ${pa.person.category.title} • ${pa.count.toPersian()} ارزیابی",

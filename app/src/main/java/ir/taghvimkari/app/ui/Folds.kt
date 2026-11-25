@@ -38,22 +38,42 @@ import ir.taghvimkari.app.domain.toPersian
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** Colour and size of a shift leader's name (bigger, bold) versus his members' names (smaller, plain). */
+/**
+ * Colour and size of names everywhere in the app: a member (زیرمجموعه — somebody who belongs to a shift leader)
+ * is smaller and in another colour; everybody else (shift leaders and people without a leader) is shown like a leader.
+ */
 val LeaderNameColor = Color(0xFF6A1B9A)
 val MemberNameColor = Color(0xFF455A64)
 
+val Person.isMember: Boolean get() = leaderId != null && !isLeader
+
 @Composable
 fun PersonNameText(person: Person, modifier: Modifier = Modifier) {
-    if (person.isLeader) {
+    if (person.isMember) {
+        Text(person.name, modifier, color = MemberNameColor, fontSize = 14.sp)
+    } else {
         Text(
-            "${person.name} • سرشیفت",
+            if (person.isLeader) "${person.name} • سرشیفت" else person.name,
             modifier,
             fontWeight = FontWeight.Bold,
             color = LeaderNameColor,
             fontSize = 18.sp
         )
+    }
+}
+
+/** A name inside lists and cards, styled by [member]: members smaller and in another colour, the rest like a leader. */
+@Composable
+fun StyledName(
+    name: String,
+    member: Boolean,
+    modifier: Modifier = Modifier,
+    maxLines: Int = Int.MAX_VALUE
+) {
+    if (member) {
+        Text(name, modifier, color = MemberNameColor, fontSize = 13.sp, maxLines = maxLines)
     } else {
-        Text(person.name, modifier, color = MemberNameColor, fontSize = 14.sp)
+        Text(name, modifier, color = LeaderNameColor, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = maxLines)
     }
 }
 
@@ -92,6 +112,8 @@ fun FoldSection(
     big: Boolean,
     onToggle: () -> Unit,
     unit: String = "نفر",
+    /** Non-null when the title is a person's name: then it is styled as a member (true) or like a leader (false). */
+    titleMember: Boolean? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Surface(color = accent.copy(alpha = if (big) .10f else .06f), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
@@ -100,13 +122,17 @@ fun FoldSection(
                 Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(horizontal = 12.dp, vertical = if (big) 12.dp else 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    title,
-                    Modifier.weight(1f),
-                    fontWeight = FontWeight.Bold,
-                    color = accent,
-                    style = if (big) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge
-                )
+                if (titleMember != null) {
+                    StyledName(title, titleMember, Modifier.weight(1f))
+                } else {
+                    Text(
+                        title,
+                        Modifier.weight(1f),
+                        fontWeight = FontWeight.Bold,
+                        color = accent,
+                        style = if (big) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge
+                    )
+                }
                 Text("${count.toPersian()} $unit", color = accent, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                 Text(if (expanded) "  ▲" else "  ▼", color = accent)
             }

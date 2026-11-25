@@ -92,6 +92,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
     val activeLabelled = remember(people) { uniqueLabels(people.filter { it.active }) }
     val nameById = remember(people) { people.associate { it.id to it.name } }
     val rankById = remember(people) { people.associate { it.id to it.shiftRank } }
+    val memberIds = remember(people) { people.filter { it.isMember }.map { it.id }.toSet() }
     val nameOf: (ReportEntry) -> String = { e -> nameById[e.personId] ?: e.personName }
 
     val period = remember(mode, customFrom, customTo) { periodFor(mode, todayJalali, customFrom, customTo) }
@@ -211,7 +212,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
                     perPerson.forEach { (id, name, t) ->
                         Column(Modifier.fillMaxWidth().clickable { personFilter = id }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(name, Modifier.weight(1f), fontWeight = FontWeight.Bold, color = Navy)
+                                StyledName(name, id in memberIds, Modifier.weight(1f))
                                 Text(
                                     (if (t.net < 0) "−" else "") + formatHours(abs(t.net)) + " ساعت",
                                     fontWeight = FontWeight.Bold,
@@ -261,10 +262,11 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
                         val personKey = "$key-$personId"
                         FoldSection(
                             title = nameOf(personList.first()), count = personList.size, accent = accent,
+                            titleMember = personId in memberIds,
                             expanded = personKey in open, big = false,
                             onToggle = { flip(personKey) }, unit = "سابقه"
                         ) {
-                            personList.forEach { e -> ReportCard(e, nameOf(e), kind) { editingId = e.id } }
+                            personList.forEach { e -> ReportCard(e, nameOf(e), e.personId in memberIds, kind) { editingId = e.id } }
                         }
                     }
             }
@@ -276,7 +278,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
                 title = "بدون ساعت", count = neither.size, accent = Color.Gray, expanded = key in open, big = true,
                 onToggle = { flip(key) }, unit = "سابقه"
             ) {
-                neither.forEach { e -> ReportCard(e, nameOf(e), 0) { editingId = e.id } }
+                neither.forEach { e -> ReportCard(e, nameOf(e), e.personId in memberIds, 0) { editingId = e.id } }
             }
         }
     }
@@ -348,10 +350,10 @@ private fun ShareBar(reward: Double, punishment: Double, height: Dp, modifier: M
 }
 
 @Composable
-private fun ReportCard(entry: ReportEntry, name: String, kind: Int, onClick: () -> Unit) {
+private fun ReportCard(entry: ReportEntry, name: String, member: Boolean, kind: Int, onClick: () -> Unit) {
     AppCard(onClick = onClick, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(name, Modifier.weight(1f), fontWeight = FontWeight.Bold, color = Navy)
+                StyledName(name, member, Modifier.weight(1f))
                 Text(JalaliDate.from(entry.date).display(), color = Color.Gray, style = MaterialTheme.typography.bodySmall)
             }
             // The title is the heading; the description of the violation below it is smaller and in another colour.

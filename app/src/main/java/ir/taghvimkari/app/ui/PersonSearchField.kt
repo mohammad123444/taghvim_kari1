@@ -130,8 +130,9 @@ fun PersonSearchField(
                     ) {
                         suggestions.forEachIndexed { index, (person, name) ->
                             if (index > 0) HorizontalDivider(color = Color(0xFFEDEBF7))
-                            Text(
+                            StyledName(
                                 name,
+                                person.isMember,
                                 Modifier
                                     .fillMaxWidth()
                                     .clickable {
@@ -139,9 +140,7 @@ fun PersonSearchField(
                                         onSelect(person.id)
                                         focusManager.clearFocus()
                                     }
-                                    .padding(horizontal = 14.dp, vertical = 11.dp),
-                                fontWeight = FontWeight.Bold,
-                                color = Navy
+                                    .padding(horizontal = 14.dp, vertical = 11.dp)
                             )
                         }
                     }
