@@ -885,7 +885,7 @@ private fun ResultsSection(
                 (evaluatorFilter.isBlank() || it.evaluatorId == evaluatorFilter) &&
                 (periodFilter.isBlank() || it.periodKey == periodFilter)
         }
-        .sortedWith(compareBy<EvaluationEntry> { rankById[it.personId] ?: 9 }.thenByDescending { it.date }.thenBy { nameOf(it) })
+        .sortedWith(compareByDescending<EvaluationEntry> { it.date }.thenBy { nameOf(it) })
 
     // ----- filters
     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
@@ -1047,7 +1047,7 @@ private fun ResultsSection(
             val name = nameById[id] ?: list.firstOrNull { it.evaluatorName.isNotBlank() }?.evaluatorName.orEmpty()
             Triple(id, name.ifBlank { "ارزیاب نامشخص" }, list)
         }
-        .sortedWith(compareBy<Triple<String, String, List<EvaluationEntry>>> { rankById[it.first] ?: 9 }.thenComparator { a, b -> compareNames(a.second, b.second) })
+        .sortedAlphabetically { it.second }
     val flipped = flippedGroups.split(",").toSet()
     groups.forEach { (id, evaluatorName, list) ->
         val key = id.ifBlank { "-" }

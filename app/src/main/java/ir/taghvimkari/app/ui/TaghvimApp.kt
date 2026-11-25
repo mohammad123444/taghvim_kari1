@@ -240,7 +240,7 @@ private const val PAGE_SETTINGS = 5
 private const val PAGE_SUMMARY = 6
 
 /** The blue header shows the title of the current page (indexes as in the bottom bar; 5 = settings). */
-private val PAGE_TITLES = listOf("تقویم", "مدیریت نیروها", "مقایسه", "سوابق تشویق و تنبیه", "ارزیابی نیروها", "تنظیمات", "جمع‌بندی")
+private val PAGE_TITLES = listOf("تقویم", "مدیریت نیروها", "مقایسه", "سوابق تشویق و تنبیه", "ارزیابی نیروها", "تنظیمات")
 
 @Composable
 private fun AppHeader(title: String, settingsOpen: Boolean, onSettings: () -> Unit) {
