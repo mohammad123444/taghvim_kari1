@@ -867,6 +867,7 @@ private fun ResultsSection(
     val labelled = remember(people) { uniqueLabels(people) }
     val evaluatorIds = remember(evaluations) { evaluations.map { it.evaluatorId }.filter { it.isNotBlank() }.distinct() }
     val nameById = remember(people) { people.associate { it.id to it.name } }
+    val rankById = remember(people) { people.associate { it.id to it.shiftRank } }
     val evaluatorList = remember(evaluations, people) {
         evaluatorIds
             .map { id -> id to (nameById[id] ?: evaluations.firstOrNull { it.evaluatorId == id }?.evaluatorName.orEmpty()) }
@@ -874,7 +875,6 @@ private fun ResultsSection(
     }
     val evaluatorLabels = remember(evaluatorList) { numberedLabels(evaluatorList.map { it.second }) }
     val nameOf: (EvaluationEntry) -> String = { e -> nameById[e.personId] ?: e.personName }
-    val rankById = remember(people) { people.associate { it.id to it.shiftRank } }
     val periods = remember(evaluations) { evaluationPeriods(evaluations) }
     val periodLabels = remember(periods) { periods.map { periodText(it.first, it.second) } }
     val periodIndex = periods.indexOfFirst { periodKeyOf(it.first, it.second) == periodFilter }
@@ -885,7 +885,7 @@ private fun ResultsSection(
                 (evaluatorFilter.isBlank() || it.evaluatorId == evaluatorFilter) &&
                 (periodFilter.isBlank() || it.periodKey == periodFilter)
         }
-        .sortedWith(compareByDescending<EvaluationEntry> { it.date }.thenBy { nameOf(it) })
+        .sortedWith(compareBy<EvaluationEntry> { rankById[it.personId] ?: 9 }.thenByDescending { it.date }.thenBy { nameOf(it) })
 
     // ----- filters
     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
@@ -1047,7 +1047,7 @@ private fun ResultsSection(
             val name = nameById[id] ?: list.firstOrNull { it.evaluatorName.isNotBlank() }?.evaluatorName.orEmpty()
             Triple(id, name.ifBlank { "ارزیاب نامشخص" }, list)
         }
-        .sortedAlphabetically { it.second }
+        .sortedWith(compareBy<Triple<String, String, List<EvaluationEntry>>> { rankById[it.first] ?: 9 }.thenComparator { a, b -> compareNames(a.second, b.second) })
     val flipped = flippedGroups.split(",").toSet()
     groups.forEach { (id, evaluatorName, list) ->
         val key = id.ifBlank { "-" }
