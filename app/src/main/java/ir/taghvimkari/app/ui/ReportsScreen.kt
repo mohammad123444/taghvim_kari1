@@ -85,6 +85,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
     var showNew by rememberSaveable { mutableStateOf(false) }
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     var sendFailed by rememberSaveable { mutableStateOf(false) }
+    var toolsOpen by rememberSaveable { mutableStateOf(false) }
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.offerImport(uri)
@@ -113,14 +114,20 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Button(onClick = { showNew = true }, enabled = people.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("+ ثبت سابقه") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { showNew = true }, enabled = people.isNotEmpty(), modifier = Modifier.weight(1f)) { Text("+ ثبت سابقه") }
+            OutlinedButton(onClick = { toolsOpen = !toolsOpen }, modifier = Modifier.weight(1f)) {
+                Text(if (toolsOpen) "گزارش‌گیری ▲" else "گزارش‌گیری ▼")
+            }
+        }
         if (people.isEmpty()) {
             EmptyMessage("ابتدا در بخش «نیروها» افراد را ثبت کنید، بعد برایشان سابقه ثبت کنید.")
         }
 
-        // ----- filters
-        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
-            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // ----- گزارش‌گیری: period, search, send / receive and the text report, folded until needed
+        if (toolsOpen) {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     PERIOD_LABELS.forEachIndexed { index, label ->
                         val selected = mode == index
@@ -155,25 +162,23 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
                     selectedId = personFilter,
                     onSelect = { personFilter = it }
                 )
+                    ExchangeRow(
+                        sendEnabled = filtered.isNotEmpty(),
+                        sendFailed = sendFailed,
+                        onSend = { sendFailed = !DataExchange.shareReports(context, filtered) },
+                        onReceive = { filePicker.launch(arrayOf("*/*")) }
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            val text = buildReportText(period.label, filterLabel, filtered, nameOf)
+                            shareText(context, text)
+                        },
+                        enabled = filtered.isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("ارسال سوابق متنی") }
+                }
             }
         }
-
-        // ----- send / receive the reports as a file (reports only)
-        ExchangeBar(
-            sendEnabled = filtered.isNotEmpty(),
-            sendFailed = sendFailed,
-            onSend = { sendFailed = !DataExchange.shareReports(context, filtered) },
-            onReceive = { filePicker.launch(arrayOf("*/*")) }
-        )
-
-        OutlinedButton(
-            onClick = {
-                val text = buildReportText(period.label, filterLabel, filtered, nameOf)
-                shareText(context, text)
-            },
-            enabled = filtered.isNotEmpty(),
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("ارسال سوابق متنی") }
 
         // ----- summary
         Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {

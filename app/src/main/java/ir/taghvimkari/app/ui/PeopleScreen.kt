@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -43,7 +44,8 @@ fun PeopleScreen(
     onEdit: (Person) -> Unit,
     sendFailed: Boolean,
     onSend: () -> Unit,
-    onReceive: () -> Unit
+    onReceive: () -> Unit,
+    onCompare: () -> Unit
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var dateEpoch by rememberSaveable { mutableStateOf(LocalDate.now().toEpochDay()) }
@@ -80,6 +82,7 @@ fun PeopleScreen(
             color = Color.Gray,
             modifier = Modifier.padding(horizontal = 4.dp)
         )
+        Button(onClick = onCompare, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("مقایسهٔ نیروها") }
         Spacer(Modifier.height(8.dp))
         if (filtered.isEmpty()) EmptyMessage("نیرویی پیدا نشد.")
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {

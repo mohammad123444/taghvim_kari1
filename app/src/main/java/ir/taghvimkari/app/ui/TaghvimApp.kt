@@ -70,6 +70,7 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
     var showAdd by rememberSaveable { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Person?>(null) }
     var peopleSendFailed by rememberSaveable { mutableStateOf(false) }
+    var showCompare by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.offerImport(uri)
@@ -133,9 +134,9 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
                     onEdit = { editing = it },
                     sendFailed = peopleSendFailed,
                     onSend = { peopleSendFailed = !DataExchange.sharePeople(context, viewModel.people) },
-                    onReceive = { filePicker.launch(arrayOf("*/*")) }
+                    onReceive = { filePicker.launch(arrayOf("*/*")) },
+                    onCompare = { showCompare = true }
                 )
-                2 -> CompareScreen(viewModel.people)
                 3 -> ReportsScreen(viewModel)
                 PAGE_EVALUATION -> EvaluationScreen(viewModel)
                 PAGE_SUMMARY -> SummaryScreen(viewModel)
@@ -144,6 +145,8 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
             }
         }
     }
+
+    if (showCompare) CompareDialog(viewModel.people) { showCompare = false }
 
     BackHandler(enabled = page == PAGE_SETTINGS) { page = pageBeforeSettings }
 
@@ -304,10 +307,6 @@ private fun AppNavigation(selected: Int, onSelect: (Int) -> Unit) {
         NavigationBarItem(
             selected = selected == 1, onClick = { onSelect(1) },
             icon = { Icon(Icons.Default.Person, contentDescription = null) }, label = { Text("نیروها", maxLines = 1) }
-        )
-        NavigationBarItem(
-            selected = selected == 2, onClick = { onSelect(2) },
-            icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) }, label = { Text("مقایسه", maxLines = 1) }
         )
         NavigationBarItem(
             selected = selected == 3, onClick = { onSelect(3) },
