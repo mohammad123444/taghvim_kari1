@@ -40,6 +40,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ir.taghvimkari.app.domain.Employment
 import ir.taghvimkari.app.domain.Evaluations
 import ir.taghvimkari.app.domain.JalaliDate
 import ir.taghvimkari.app.domain.Person
@@ -64,6 +65,12 @@ private val SumRed = Color(0xFFD64545)
 private fun monthRange(year: Int, month: Int): Pair<LocalDate, LocalDate> =
     JalaliDate(year, month, 1).toLocalDate() to
         JalaliDate(year, month, JalaliDate.monthLength(year, month)).toLocalDate()
+
+private fun employmentAccent(e: Employment): Color = when (e) {
+    Employment.OFFICIAL -> Purple
+    Employment.CONTRACTUAL -> Color(0xFF1E88A8)
+    Employment.CONTRACTOR -> Color(0xFFEF8B24)
+}
 
 /** One row of the table, worked out for the chosen period. */
 private class SummaryRow(
@@ -91,7 +98,8 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
     var query by rememberSaveable { mutableStateOf("") }
     var picker by rememberSaveable { mutableStateOf(0) } // 0 closed, 1 from, 2 to
     var editPerson by rememberSaveable { mutableStateOf("") }
-    var editColumn by rememberSaveable { mutableStateOf(0) } // 3 = number with comment, 4 = سطح
+    var editColumn by rememberSaveable { mutableStateOf(0) } // 3 = ملاحظات (number with comment), 4 = رئیس
+    var foldedGroups by rememberSaveable { mutableStateOf("") } // employment kinds that are folded
 
     val from = LocalDate.ofEpochDay(fromEpoch)
     val to = LocalDate.ofEpochDay(toEpoch)
@@ -163,52 +171,75 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
             val tableWidth = NAME_W + COL_W * 5
             Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
                 Column(Modifier.horizontalScroll(rememberScrollState()).width(tableWidth)) {
-                    Row(Modifier.background(Purple.copy(alpha = .12f))) {
-                        SummaryCellBox(NAME_W, "نام", Purple, bold = true)
-                        SummaryCellBox(COL_W, "ارزشیابی", Purple, bold = true)
-                        SummaryCellBox(COL_W, "تشویق", Purple, bold = true)
-                        SummaryCellBox(COL_W, "عدد", Purple, bold = true)
-                        SummaryCellBox(COL_W, "سطح", Purple, bold = true)
-                        SummaryCellBox(COL_W, "جمع", Purple, bold = true)
-                    }
-                    rows.forEach { r ->
-                        Box(Modifier.width(tableWidth).height(1.dp).background(Color(0xFFEAE8F5)))
-                        Row {
-                            SummaryCellBox(
-                                NAME_W,
-                                r.person.name + if (r.person.shiftName.isNotBlank()) " (${r.person.shiftName})" else "",
-                                Navy, bold = true, align = TextAlign.Start
-                            )
-                            SummaryCellBox(COL_W, r.evaluation?.let { formatScore(it) } ?: "—", if (r.evaluation == null) Color.Gray else Navy)
-                            SummaryCellBox(
-                                COL_W, formatSigned(r.reward),
-                                when {
-                                    r.reward > 0 -> SumGreen
-                                    r.reward < 0 -> SumRed
-                                    else -> Color.Gray
-                                },
-                                bold = r.reward != 0.0
-                            )
-                            SummaryCellBox(
-                                COL_W, r.cell?.extra?.let { formatSigned(it) } ?: "—",
-                                if (r.cell?.extra == null) Color.Gray else Navy,
-                                bg = Purple.copy(alpha = .06f),
-                                marker = r.cell?.comment?.isNotBlank() == true,
-                                onClick = { editPerson = r.person.id; editColumn = 3 }
-                            )
-                            SummaryCellBox(
-                                COL_W, r.cell?.level?.let { formatNumber(it) } ?: "—",
-                                if (r.cell?.level == null) Color.Gray else Navy,
-                                bg = Purple.copy(alpha = .06f),
-                                onClick = { editPerson = r.person.id; editColumn = 4 }
-                            )
-                            SummaryCellBox(COL_W, formatNumber(r.total), Navy, bold = true, bg = Navy.copy(alpha = .08f))
+                    Employment.entries.forEach { emp ->
+                        val group = rows.filter { it.person.employment == emp }
+                        if (group.isEmpty()) return@forEach
+                        val folded = emp.name in foldedGroups.split(",")
+                        // group header: tap to fold / unfold
+                        Row(
+                            Modifier
+                                .width(tableWidth)
+                                .background(employmentAccent(emp).copy(alpha = .12f))
+                                .clickable {
+                                    val set = foldedGroups.split(",").filter { it.isNotEmpty() }.toSet()
+                                    foldedGroups = (if (folded) set - emp.name else set + emp.name).joinToString(",")
+                                }
+                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(emp.title, Modifier.weight(1f), fontWeight = FontWeight.Bold, color = employmentAccent(emp))
+                            Text("${group.size.toPersian()} نفر", color = Color.Gray, style = MaterialTheme.typography.labelMedium)
+                            Text(if (folded) "▼" else "▲", Modifier.padding(start = 10.dp), color = employmentAccent(emp))
+                        }
+                        if (!folded) {
+                            Row(Modifier.background(Purple.copy(alpha = .06f))) {
+                                SummaryCellBox(NAME_W, "نام", Purple, bold = true)
+                                SummaryCellBox(COL_W, "جمع", Purple, bold = true)
+                                SummaryCellBox(COL_W, "ملاحظات", Purple, bold = true)
+                                SummaryCellBox(COL_W, "رئیس", Purple, bold = true)
+                                SummaryCellBox(COL_W, "تشویق / تنبیه", Purple, bold = true)
+                                SummaryCellBox(COL_W, "ارزشیابی", Purple, bold = true)
+                            }
+                            group.forEach { r ->
+                                Box(Modifier.width(tableWidth).height(1.dp).background(Color(0xFFEAE8F5)))
+                                Row {
+                                    SummaryCellBox(
+                                        NAME_W,
+                                        r.person.name + if (r.person.shiftName.isNotBlank()) " (${r.person.shiftName})" else "",
+                                        Navy, bold = true, align = TextAlign.Start
+                                    )
+                                    SummaryCellBox(COL_W, formatNumber(r.total), Navy, bold = true, bg = Navy.copy(alpha = .08f))
+                                    SummaryCellBox(
+                                        COL_W, r.cell?.extra?.let { formatSigned(it) } ?: "—",
+                                        if (r.cell?.extra == null) Color.Gray else Navy,
+                                        bg = Purple.copy(alpha = .06f),
+                                        marker = r.cell?.comment?.isNotBlank() == true,
+                                        onClick = { editPerson = r.person.id; editColumn = 3 }
+                                    )
+                                    SummaryCellBox(
+                                        COL_W, r.cell?.level?.let { formatNumber(it) } ?: "—",
+                                        if (r.cell?.level == null) Color.Gray else Navy,
+                                        bg = Purple.copy(alpha = .06f),
+                                        onClick = { editPerson = r.person.id; editColumn = 4 }
+                                    )
+                                    SummaryCellBox(
+                                        COL_W, formatSigned(r.reward),
+                                        when {
+                                            r.reward > 0 -> SumGreen
+                                            r.reward < 0 -> SumRed
+                                            else -> Color.Gray
+                                        },
+                                        bold = r.reward != 0.0
+                                    )
+                                    SummaryCellBox(COL_W, r.evaluation?.let { formatScore(it) } ?: "—", if (r.evaluation == null) Color.Gray else Navy)
+                                }
+                            }
                         }
                     }
                 }
             }
             Text(
-                "ستون «عدد» و «سطح» را با لمس کردن پر کنید؛ در «عدد» می‌توانید دلیلش را هم بنویسید و بعداً با لمس همان عدد ببینید.",
+                "ستون «ملاحظات» و «رئیس» را با لمس کردن پر کنید؛ در «ملاحظات» می‌توانید دلیلش را هم بنویسید و بعداً با لمس همان عدد ببینید.",
                 color = Color.Gray,
                 style = MaterialTheme.typography.bodySmall
             )
@@ -225,7 +256,7 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
         val cell = editRow.cell
         val isExtra = editColumn == 3
         CellDialog(
-            title = editRow.person.name + " • " + if (isExtra) "عدد" else "سطح",
+            title = editRow.person.name + " • " + if (isExtra) "ملاحظات" else "رئیس",
             number = (if (isExtra) cell?.extra else cell?.level)?.let { formatNumber(it) }.orEmpty(),
             comment = if (isExtra) cell?.comment.orEmpty() else null,
             canClear = cell != null && (if (isExtra) cell.extra != null || cell.comment.isNotBlank() else cell.level != null),
@@ -328,7 +359,7 @@ private fun CellDialog(
                 if (comment != null) {
                     OutlinedTextField(
                         value = c, onValueChange = { c = it },
-                        label = { Text("دلیل این عدد") },
+                        label = { Text("توضیح ملاحظات") },
                         minLines = 3,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -351,7 +382,7 @@ private fun CellDialog(
 
 private fun buildSummaryText(from: LocalDate, to: LocalDate, rows: List<SummaryRow>): String = buildString {
     appendLine("جمع‌بندی • ${periodText(from, to)}")
-    appendLine("(ارزشیابی + تشویق + عدد + سطح = جمع)")
+    appendLine("(ارزشیابی + تشویق / تنبیه + ملاحظات + رئیس = جمع)")
     rows.forEach { r ->
         appendLine()
         appendLine(
@@ -361,6 +392,6 @@ private fun buildSummaryText(from: LocalDate, to: LocalDate, rows: List<SummaryR
         append(" + ${formatSigned(r.cell?.extra ?: 0.0)} + ${formatNumber(r.cell?.level ?: 0.0)}")
         appendLine(" = ${formatNumber(r.total)}")
         val note = r.cell?.comment.orEmpty()
-        if (note.isNotBlank()) appendLine("  توضیح عدد: $note")
+        if (note.isNotBlank()) appendLine("  توضیح ملاحظات: $note")
     }
 }.trim()
