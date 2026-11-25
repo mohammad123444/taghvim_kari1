@@ -71,7 +71,7 @@ private fun monthRange(year: Int, month: Int): Pair<LocalDate, LocalDate> =
         JalaliDate(year, month, JalaliDate.monthLength(year, month)).toLocalDate()
 
 /** Summary groups, in this order: پیمانکاری، رسمی، قرارداد مستقیم. */
-private val SUMMARY_ORDER = listOf(Employment.CONTRACTOR, Employment.OFFICIAL, Employment.CONTRACTUAL)
+private val SUMMARY_ORDER = listOf(Employment.OFFICIAL, Employment.CONTRACTUAL, Employment.CONTRACTOR)
 
 private fun summaryTitle(e: Employment): String = if (e == Employment.CONTRACTUAL) "قرارداد مستقیم" else e.title
 

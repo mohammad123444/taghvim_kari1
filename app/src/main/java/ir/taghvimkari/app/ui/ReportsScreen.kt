@@ -23,6 +23,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -112,21 +113,34 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
         verticalArrangement = Arrangement.spacedBy(CardGap)
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { showNew = true }, enabled = people.isNotEmpty(), modifier = Modifier.weight(1f)) { Text("+ ثبت سابقه") }
-            FoldToggle(
-                title = "گزارش‌گیری",
-                open = toolsOpen,
-                active = mode != 0 || personFilter.isNotBlank(),
-                onClick = { toolsOpen = !toolsOpen },
-                modifier = Modifier.weight(1f),
-                showLabel = false
-            )
+            // Two parts: «ثبت سابقه» (default) and «مشاهده سوابق» (period / person filters). The part we are in is blue.
+            val blue = ButtonDefaults.buttonColors(containerColor = Blue)
+            val filterOn = mode != 0 || personFilter.isNotBlank()
+            if (toolsOpen) {
+                OutlinedButton(
+                    onClick = { toolsOpen = false; showNew = true },
+                    enabled = people.isNotEmpty(),
+                    modifier = Modifier.weight(1f)
+                ) { Text("+ ثبت سابقه") }
+                Button(onClick = { toolsOpen = false }, colors = blue, modifier = Modifier.weight(1f)) {
+                    Text("مشاهده سوابق ▲")
+                    if (filterOn) Text(" ●", color = Orange)
+                }
+            } else {
+                Button(onClick = { showNew = true }, enabled = people.isNotEmpty(), colors = blue, modifier = Modifier.weight(1f)) {
+                    Text("+ ثبت سابقه")
+                }
+                OutlinedButton(onClick = { toolsOpen = true }, modifier = Modifier.weight(1f)) {
+                    Text("مشاهده سوابق ▼")
+                    if (filterOn) Text(" ●", color = Orange)
+                }
+            }
         }
         if (people.isEmpty()) {
             EmptyMessage("ابتدا در بخش «نیروها» افراد را ثبت کنید، بعد برایشان سابقه ثبت کنید.")
         }
 
-        // ----- گزارش‌گیری: period, search, send / receive and the text report, folded until needed
+        // ----- مشاهده سوابق: period and person filters, folded until needed
         if (toolsOpen) {
             FoldPanel {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -193,8 +207,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
 
         // ----- per person
         if (perPerson.isNotEmpty()) {
-            AppCard(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("به تفکیک نفر", fontWeight = FontWeight.Bold, color = Navy, style = MaterialTheme.typography.titleMedium)
+            FoldBox("به تفکیک نفر") {
                     perPerson.forEach { (id, name, t) ->
                         Column(Modifier.fillMaxWidth().clickable { personFilter = id }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {

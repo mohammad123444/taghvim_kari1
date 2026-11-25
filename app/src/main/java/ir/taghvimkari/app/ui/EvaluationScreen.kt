@@ -125,8 +125,7 @@ fun EvaluationScreen(viewModel: PeopleViewModel) {
     val people = viewModel.people
     val evaluations = viewModel.evaluations
     val draft = viewModel.workingDraft
-    var mode by rememberSaveable { mutableStateOf(0) } // 0 new evaluation, 1 results and report
-    var resultsView by rememberSaveable { mutableStateOf(0) } // inside «نتایج و گزارش»: 0 list, 1 advanced report
+    var mode by rememberSaveable { mutableStateOf(0) } // 0 new evaluation, 1 results
     var formOpen by rememberSaveable { mutableStateOf(false) }
     var detailId by rememberSaveable { mutableStateOf<String?>(null) }
     var returnMode by rememberSaveable { mutableStateOf(0) }      // the page to go back to when a round ends
@@ -159,7 +158,7 @@ fun EvaluationScreen(viewModel: PeopleViewModel) {
         TwoBoxTabs(
             listOf(
                 "ارزیابی جدید",
-                "نتایج و گزارش (${evaluations.size.toPersian()})" + if (drafts > 0) " • ناتمام ${drafts.toPersian()}" else ""
+                "نتایج (${evaluations.size.toPersian()})" + if (drafts > 0) " • ناتمام ${drafts.toPersian()}" else ""
             ),
             mode
         ) { mode = it }
@@ -171,19 +170,13 @@ fun EvaluationScreen(viewModel: PeopleViewModel) {
                 onStart = ::startSession
             )
         } else {
-            // One box for both: the switch on top chooses the list of results or the advanced report.
-            TwoBoxSwitch(listOf("فهرست", "گزارش پیشرفته"), resultsView) { resultsView = it }
-            if (resultsView == 1) {
-                AdvancedReportSection(people = people, evaluations = evaluations)
-            } else {
-                ResultsSection(
-                    people = people,
-                    evaluations = evaluations,
-                    onOpen = { detailId = it },
-                    onResume = { e -> startSession(e.evaluatorId, listOf(e.personId), e.date.toEpochDay(), e.dateTo.toEpochDay()) },
-                    onDelete = { ids -> viewModel.deleteEvaluations(ids.toSet()) }
-                )
-            }
+            ResultsSection(
+                people = people,
+                evaluations = evaluations,
+                onOpen = { detailId = it },
+                onResume = { e -> startSession(e.evaluatorId, listOf(e.personId), e.date.toEpochDay(), e.dateTo.toEpochDay()) },
+                onDelete = { ids -> viewModel.deleteEvaluations(ids.toSet()) }
+            )
         }
     }
 
@@ -614,35 +607,7 @@ private fun StepBox(number: Int, title: String, hint: String, enabled: Boolean, 
     }
 }
 
-/** A small two-state switch (like «فهرست / گزارش پیشرفته»): two equal halves, the chosen one filled. */
-@Composable
-private fun TwoBoxSwitch(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Purple.copy(alpha = .12f)).padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp)
-    ) {
-        options.forEachIndexed { index, label ->
-            val on = selected == index
-            Surface(
-                color = if (on) Purple else Color.Transparent,
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).clickable { onSelect(index) }
-            ) {
-                Text(
-                    label,
-                    Modifier.fillMaxWidth().padding(vertical = 10.dp),
-                    textAlign = TextAlign.Center,
-                    color = if (on) Color.White else Purple,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    style = MaterialTheme.typography.labelLarge
-                )
-            }
-        }
-    }
-}
-
-/** Two equal boxes that fill the whole width (ارزیابی جدید / نتایج و گزارش). */
+/** Two equal boxes that fill the whole width (ارزیابی جدید / نتایج). */
 @Composable
 private fun TwoBoxTabs(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1200,7 +1165,7 @@ private fun BreakdownBlock(title: String, rows: List<BreakdownRow>) {
  * one short summary where the final number comes first.
  */
 @Composable
-private fun AdvancedReportSection(people: List<Person>, evaluations: List<EvaluationEntry>) {
+internal fun AdvancedReportSection(people: List<Person>, evaluations: List<EvaluationEntry>) {
     val context = LocalContext.current
     val today = LocalDate.now().toEpochDay()
     // The first dates are remembered so the box can tell when the person has changed them (a filter is on).

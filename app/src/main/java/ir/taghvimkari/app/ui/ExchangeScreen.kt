@@ -262,6 +262,23 @@ private fun EvaluationsExchange(
     context: android.content.Context,
     onReceive: () -> Unit
 ) {
+    // «ارسال گزارش ارزیابی»: either the evaluations themselves (a file) or the advanced report (a short text).
+    var view by rememberSaveable { mutableStateOf(0) }
+    SectionSwitch(listOf("ارسال/دریافت ارزیابی‌ها", "گزارش پیشرفته"), view) { view = it }
+    if (view == 1) {
+        AdvancedReportSection(people = people, evaluations = evaluations)
+    } else {
+        EvaluationFileExchange(people, evaluations, context, onReceive)
+    }
+}
+
+@Composable
+private fun EvaluationFileExchange(
+    people: List<Person>,
+    evaluations: List<EvaluationEntry>,
+    context: android.content.Context,
+    onReceive: () -> Unit
+) {
     var personFilter by rememberSaveable { mutableStateOf("") }
     var evaluatorFilter by rememberSaveable { mutableStateOf("") }
     var periodFilter by rememberSaveable { mutableStateOf("") } // key of the evaluation period, blank = all

@@ -61,16 +61,14 @@ fun PeopleScreen(
             Button(onClick = onAdd, modifier = Modifier.weight(1f)) { Text("+ افزودن نیرو") }
             Button(onClick = onCompare, modifier = Modifier.weight(1f)) { Text("مقایسهٔ نیروها") }
         }
-        // Search stays folded until needed; the dot shows while a search is on.
-        FoldBox("جستجو", active = searching) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier.fillMaxWidth().keepVisibleWhenFocused(),
-                label = { Text("جستجو بر اساس نام (حداقل ${MIN_SEARCH_CHARS.toPersian()} حرف)") },
-                singleLine = true
-            )
-        }
+        // The name search is a plain box on the page, not inside a fold.
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier.fillMaxWidth().keepVisibleWhenFocused(),
+            label = { Text("جستجو بر اساس نام (حداقل ${MIN_SEARCH_CHARS.toPersian()} حرف)") },
+            singleLine = true
+        )
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(onClick = { showPicker = true }, modifier = Modifier.weight(1f)) {
