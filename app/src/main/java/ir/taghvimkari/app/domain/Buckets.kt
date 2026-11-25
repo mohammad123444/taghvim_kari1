@@ -37,9 +37,17 @@ fun bucketOf(person: Person, status: DayStatus): Bucket {
  * Lists everywhere show a team together: the shift leader first, immediately followed by
  * his members. People without a team come last.
  */
+/** Shift order everywhere: A, B, C, D, then people without a shift. */
+val Person.shiftRank: Int get() = SHIFT_NAMES.indexOf(shiftName).let { if (it < 0) SHIFT_NAMES.size else it }
+
+/** Shift A first, then B, C, D; inside a shift by name. */
+fun List<Person>.sortedByShiftName(): List<Person> =
+    sortedWith(compareBy<Person> { it.shiftRank }.thenComparator { a, b -> compareNames(a.name, b.name) })
+
 fun <T> List<T>.sortedByTeam(leaderNames: Map<String, String>, person: (T) -> Person): List<T> =
     sortedWith(
         compareBy<T>(
+            { person(it).shiftRank },
             { val p = person(it); if (p.isLeader || p.leaderId != null) 0 else 1 },
             { val p = person(it); if (p.isLeader) p.name else (p.leaderId?.let { id -> leaderNames[id] } ?: p.name) },
             { val p = person(it); p.leaderId ?: p.id },

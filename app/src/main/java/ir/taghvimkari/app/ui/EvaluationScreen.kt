@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -40,6 +41,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TriStateCheckbox
+import androidx.compose.ui.state.ToggleableState
+import ir.taghvimkari.app.domain.Category
+import ir.taghvimkari.app.domain.Employment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -72,7 +77,10 @@ import ir.taghvimkari.app.domain.periodKeyOf
 import ir.taghvimkari.app.domain.periodText
 import ir.taghvimkari.app.domain.formatScore
 import ir.taghvimkari.app.domain.normalizeFa
-import ir.taghvimkari.app.domain.sortedAlphabetically
+import ir.taghvimkari.app.domain.SHIFT_NAMES
+import ir.taghvimkari.app.domain.compareNames
+import ir.taghvimkari.app.domain.shiftRank
+import ir.taghvimkari.app.domain.sortedByShiftName
 import ir.taghvimkari.app.domain.WorkingDraft
 import ir.taghvimkari.app.domain.nextFocus
 import ir.taghvimkari.app.domain.previousEvaluation
@@ -117,6 +125,9 @@ fun EvaluationScreen(viewModel: PeopleViewModel) {
     var formOpen by rememberSaveable { mutableStateOf(false) }
     var detailId by rememberSaveable { mutableStateOf<String?>(null) }
     var sendFailed by rememberSaveable { mutableStateOf(false) }
+    var returnMode by rememberSaveable { mutableStateOf(0) }      // the page to go back to when a round ends
+    var finishedCount by rememberSaveable { mutableStateOf(0) }   // > 0 shows «خاتمه ارزیابی»
+    var clearSignal by rememberSaveable { mutableStateOf(0) }     // clears the ticked people on the new-evaluation page
     val context = LocalContext.current
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -125,6 +136,7 @@ fun EvaluationScreen(viewModel: PeopleViewModel) {
 
     fun startSession(evaluatorId: String, personIds: List<String>, fromEpoch: Long, toEpoch: Long) {
         viewModel.startDraft(evaluatorId, personIds, fromEpoch, toEpoch)
+        returnMode = mode
         formOpen = true
     }
 
@@ -144,10 +156,11 @@ fun EvaluationScreen(viewModel: PeopleViewModel) {
             )
         }
         val drafts = evaluations.count { !it.isComplete }
-        ChoiceChips(
+        TwoBoxTabs(
             listOf(
                 "ارزیابی جدید",
-                "نتایج (${evaluations.size.toPersian()})" + if (drafts > 0) " • ناتمام ${drafts.toPersian()}" else ""
+                "نتایج (${evaluations.size.toPersian()})" + if (drafts > 0) " • ناتمام ${drafts.toPersian()}" else "",
+                "گزارش پیشرفته"
             ),
             mode
         ) { mode = it }
@@ -155,8 +168,11 @@ fun EvaluationScreen(viewModel: PeopleViewModel) {
             NewEvaluationSection(
                 people = people,
                 evaluations = evaluations,
+                clearSignal = clearSignal,
                 onStart = ::startSession
             )
+        } else if (mode == 2) {
+            AdvancedReportSection(people = people, evaluations = evaluations)
         } else {
             ResultsSection(
                 people = people,
@@ -165,17 +181,31 @@ fun EvaluationScreen(viewModel: PeopleViewModel) {
                 onOpen = { detailId = it },
                 onResume = { e -> startSession(e.evaluatorId, listOf(e.personId), e.date.toEpochDay(), e.dateTo.toEpochDay()) },
                 onSend = { list -> sendFailed = !DataExchange.shareEvaluations(context, list) },
-                onReceive = { picker.launch(arrayOf("*/*")) }
+                onReceive = { picker.launch(arrayOf("*/*")) },
+                onDelete = { ids -> viewModel.deleteEvaluations(ids.toSet()) }
             )
         }
+    }
+
+    // ----- «خاتمه ارزیابی»: shown when the last chosen person was done, then back to the page we came from
+    if (finishedCount > 0) {
+        AlertDialog(
+            onDismissRequest = { finishedCount = 0 },
+            title = { Text("خاتمه ارزیابی", fontWeight = FontWeight.Bold) },
+            text = { Text("ارزیابی ${finishedCount.toPersian()} نفر پایان یافت.") },
+            confirmButton = { TextButton(onClick = { finishedCount = 0 }) { Text("تأیید") } }
+        )
     }
 
     // ----- scoring one person after another
     if (draft != null && formOpen) {
         val person = people.firstOrNull { it.id == draft.currentPersonId }
+        val total = draft.personIds.size
         val finish = {
             formOpen = false
-            mode = 1
+            mode = returnMode
+            clearSignal += 1
+            finishedCount = total
         }
         if (person == null) {
             // This person was deleted since the round started: skip him.
@@ -276,6 +306,7 @@ private fun ResumeCard(draft: WorkingDraft, personName: String, onResume: () -> 
 private fun NewEvaluationSection(
     people: List<Person>,
     evaluations: List<EvaluationEntry>,
+    clearSignal: Int,
     onStart: (evaluatorId: String, personIds: List<String>, fromEpoch: Long, toEpoch: Long) -> Unit
 ) {
     var evaluatorId by rememberSaveable { mutableStateOf("") }
@@ -284,6 +315,9 @@ private fun NewEvaluationSection(
     var selectedText by rememberSaveable { mutableStateOf("") }
     var query by rememberSaveable { mutableStateOf("") }
     var picker by rememberSaveable { mutableStateOf(0) } // 0 closed, 1 from, 2 to
+    var openGroups by rememberSaveable { mutableStateOf("") } // keys of the unfolded groups
+    LaunchedEffect(clearSignal) { if (clearSignal > 0) selectedText = "" }
+    val doneCount = remember(evaluations) { evaluations.filter { it.isComplete }.groupingBy { it.personId }.eachCount() }
 
     // Everybody can evaluate: the evaluator is chosen from all active people.
     val evaluatorOptions = remember(people) { uniqueLabels(people.filter { it.active }) }
@@ -300,7 +334,7 @@ private fun NewEvaluationSection(
         .sortedByTeam(leaderNames) { it }
     val candidateIds = candidates.map { it.id }.toSet()
     val selected = selectedText.split(",").filter { it in candidateIds }.toSet()
-    val chosen = candidates.filter { it.id in selected }.sortedAlphabetically { it.name }
+    val chosen = candidates.filter { it.id in selected }.sortedByShiftName()
 
     fun draftOf(p: Person): EvaluationEntry? = evaluations.firstOrNull {
         it.personId == p.id && it.evaluatorId == evaluatorId && it.date == fromDate && it.dateTo == toDate
@@ -351,38 +385,63 @@ private fun NewEvaluationSection(
         if (shown.isEmpty()) {
             Text("نیرویی پیدا نشد.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
         }
-        shown.forEach { p ->
-            val isMember = p.leaderId != null && !p.isLeader
-            val teamIds: Set<String> = if (p.isLeader) {
-                (candidates.filter { it.leaderId == p.id }.map { it.id } + p.id).filter { it in candidateIds }.toSet()
-            } else {
-                setOf(p.id)
-            }
-            val checked = teamIds.isNotEmpty() && teamIds.all { it in selected }
-            val draft = draftOf(p)
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable {
-                        selectedText = (if (checked) selected - teamIds else selected + teamIds).joinToString(",")
+        val open = openGroups.split(",").toSet()
+        Employment.entries.forEach { emp ->
+            Category.entries.forEach { cat ->
+                val members = shown.filter { it.employment == emp && it.category == cat }
+                if (members.isEmpty() && q.isNotBlank()) return@forEach
+                val key = "${emp.name}-${cat.name}"
+                val expanded = key in open || q.isNotBlank()
+                FoldGroup(
+                    title = "${emp.title} • ${cat.title}",
+                    accent = employmentColor(emp),
+                    total = members.size,
+                    selectedCount = members.count { it.id in selected },
+                    expanded = expanded,
+                    onToggle = { openGroups = (if (key in open) open - key else open + key).joinToString(",") },
+                    onSelectAll = { allOn ->
+                        val ids = members.map { it.id }
+                        selectedText = (if (allOn) selected - ids.toSet() else selected + ids).joinToString(",")
                     }
-                    .padding(start = if (isMember) 18.dp else 0.dp, top = 2.dp, bottom = 2.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(checked = checked, onCheckedChange = null)
-                Column(Modifier.padding(start = 8.dp)) {
-                    Text(if (p.isLeader) "${p.name} • سرشیفت (با زیرمجموعه)" else p.name, fontWeight = FontWeight.Bold, color = Navy)
-                    val status = when {
-                        draft == null -> "${p.employment.title} • ${p.category.title}"
-                        draft.isComplete -> "در این دوره ارزیابی شده (${formatScore(draft.finalScore)})"
-                        else -> "ناتمام: ${draft.doneCount.toPersian()} از ${EvaluationItems.count.toPersian()} آیتم"
+                ) {
+                    members.forEach { p ->
+                        val isMember = p.leaderId != null && !p.isLeader
+                        val teamIds: Set<String> = if (p.isLeader) {
+                            (candidates.filter { it.leaderId == p.id }.map { it.id } + p.id).filter { it in candidateIds }.toSet()
+                        } else {
+                            setOf(p.id)
+                        }
+                        val checked = teamIds.isNotEmpty() && teamIds.all { it in selected }
+                        val draft = draftOf(p)
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    selectedText = (if (checked) selected - teamIds else selected + teamIds).joinToString(",")
+                                }
+                                .padding(start = if (isMember) 18.dp else 0.dp, top = 2.dp, bottom = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(checked = checked, onCheckedChange = null)
+                            Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                                Text(if (p.isLeader) "${p.name} • سرشیفت (با زیرمجموعه)" else p.name, fontWeight = FontWeight.Bold, color = Navy)
+                                val status = when {
+                                    draft == null -> if (p.shiftName.isNotBlank()) "شیفت ${p.shiftName}" else ""
+                                    draft.isComplete -> "در این دوره ارزیابی شده (${formatScore(draft.finalScore)})"
+                                    else -> "ناتمام: ${draft.doneCount.toPersian()} از ${EvaluationItems.count.toPersian()} آیتم"
+                                }
+                                if (status.isNotBlank()) {
+                                    Text(
+                                        status,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (draft != null && !draft.isComplete) DraftOrange else Color.Gray
+                                    )
+                                }
+                            }
+                            CountBadge(doneCount[p.id] ?: 0)
+                        }
                     }
-                    Text(
-                        status,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (draft != null && !draft.isComplete) DraftOrange else Color.Gray
-                    )
                 }
             }
         }
@@ -422,6 +481,80 @@ private fun NewEvaluationSection(
     }
 }
 
+private fun employmentColor(e: Employment): Color = when (e) {
+    Employment.OFFICIAL -> Purple
+    Employment.CONTRACTUAL -> Color(0xFF1E88A8)
+    Employment.CONTRACTOR -> DraftOrange
+}
+
+/** A foldable group: coloured header with its title, «ticked/total» and a select-all box; [content] shows when unfolded. */
+@Composable
+private fun FoldGroup(
+    title: String,
+    accent: Color,
+    total: Int,
+    selectedCount: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onSelectAll: (currentlyAll: Boolean) -> Unit,
+    content: @Composable () -> Unit
+) {
+    val all = total > 0 && selectedCount == total
+    Surface(color = accent.copy(alpha = .08f), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(start = 6.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TriStateCheckbox(
+                    state = when {
+                        all -> ToggleableState.On
+                        selectedCount > 0 -> ToggleableState.Indeterminate
+                        else -> ToggleableState.Off
+                    },
+                    onClick = { onSelectAll(all) },
+                    enabled = total > 0
+                )
+                Text(title, Modifier.weight(1f), fontWeight = FontWeight.Bold, color = accent)
+                Surface(color = accent, shape = RoundedCornerShape(12.dp)) {
+                    Text(
+                        "${selectedCount.toPersian()}/${total.toPersian()}",
+                        Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+                Text(if (expanded) "▲" else "▼", Modifier.padding(start = 10.dp), color = accent)
+            }
+            if (expanded) {
+                Column(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 8.dp)) {
+                    if (total == 0) {
+                        Text("نیرویی در این گروه نیست.", color = Color.Gray, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(8.dp))
+                    }
+                    content()
+                }
+            }
+        }
+    }
+}
+
+/** How many finished evaluations a person has, as a small pill. */
+@Composable
+private fun CountBadge(count: Int) {
+    val color = if (count > 0) Purple else Color.Gray
+    Surface(color = color.copy(alpha = .12f), shape = RoundedCornerShape(12.dp)) {
+        Row(Modifier.padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (count > 0) {
+                Text(count.toPersian(), color = color, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                Text(" ارزیابی", color = color, style = MaterialTheme.typography.labelSmall)
+            } else {
+                Text("بدون ارزیابی", color = color, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+}
+
 @Composable
 private fun StepBox(number: Int, title: String, hint: String, enabled: Boolean, content: @Composable () -> Unit) {
     Card(
@@ -450,6 +583,31 @@ private fun StepBox(number: Int, title: String, hint: String, enabled: Boolean, 
             }
             if (hint.isNotBlank()) Text(hint, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
             if (enabled) content()
+        }
+    }
+}
+
+/** Two equal boxes that fill the whole width (ارزیابی جدید / نتایج). */
+@Composable
+private fun TwoBoxTabs(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        options.forEachIndexed { index, label ->
+            val on = selected == index
+            Surface(
+                color = if (on) Purple else Purple.copy(alpha = .12f),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).clickable { onSelect(index) }
+            ) {
+                Text(
+                    label,
+                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 14.dp),
+                    textAlign = TextAlign.Center,
+                    color = if (on) Color.White else Purple,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    style = MaterialTheme.typography.titleSmall
+                )
+            }
         }
     }
 }
@@ -697,8 +855,11 @@ private fun ResultsSection(
     onOpen: (String) -> Unit,
     onResume: (EvaluationEntry) -> Unit,
     onSend: (List<EvaluationEntry>) -> Unit,
-    onReceive: () -> Unit
+    onReceive: () -> Unit,
+    onDelete: (List<String>) -> Unit
 ) {
+    var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    var flippedGroups by rememberSaveable { mutableStateOf("") } // evaluator groups folded/unfolded against the default
     var personFilter by rememberSaveable { mutableStateOf("") }
     var evaluatorFilter by rememberSaveable { mutableStateOf("") }
     var periodFilter by rememberSaveable { mutableStateOf("") } // key of the evaluation period, blank = all
@@ -709,10 +870,11 @@ private fun ResultsSection(
     val evaluatorList = remember(evaluations, people) {
         evaluatorIds
             .map { id -> id to (nameById[id] ?: evaluations.firstOrNull { it.evaluatorId == id }?.evaluatorName.orEmpty()) }
-            .sortedAlphabetically { it.second }
+            .sortedWith(compareBy<Pair<String, String>> { rankById[it.first] ?: 9 }.thenComparator { a, b -> compareNames(a.second, b.second) })
     }
     val evaluatorLabels = remember(evaluatorList) { numberedLabels(evaluatorList.map { it.second }) }
     val nameOf: (EvaluationEntry) -> String = { e -> nameById[e.personId] ?: e.personName }
+    val rankById = remember(people) { people.associate { it.id to it.shiftRank } }
     val periods = remember(evaluations) { evaluationPeriods(evaluations) }
     val periodLabels = remember(periods) { periods.map { periodText(it.first, it.second) } }
     val periodIndex = periods.indexOfFirst { periodKeyOf(it.first, it.second) == periodFilter }
@@ -723,15 +885,7 @@ private fun ResultsSection(
                 (evaluatorFilter.isBlank() || it.evaluatorId == evaluatorFilter) &&
                 (periodFilter.isBlank() || it.periodKey == periodFilter)
         }
-        .sortedWith(compareByDescending<EvaluationEntry> { it.date }.thenBy { nameOf(it) })
-
-    // ----- send / receive (evaluations only; staff and reports have their own send buttons)
-    ExchangeBar(
-        sendEnabled = filtered.isNotEmpty(),
-        sendFailed = sendFailed,
-        onSend = { onSend(filtered) },
-        onReceive = onReceive
-    )
+        .sortedWith(compareBy<EvaluationEntry> { rankById[it.personId] ?: 9 }.thenByDescending { it.date }.thenBy { nameOf(it) })
 
     // ----- filters
     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
@@ -761,7 +915,30 @@ private fun ResultsSection(
                     evaluatorFilter = evaluatorList.getOrNull(evaluatorLabels.indexOf(label))?.first ?: ""
                 }
             }
+            // send / receive / delete sit under all the filters and work on the filtered list
+            ExchangeRow(
+                sendEnabled = filtered.isNotEmpty(),
+                sendFailed = sendFailed,
+                onSend = { onSend(filtered) },
+                onReceive = onReceive,
+                onDelete = { confirmDelete = true },
+                deleteEnabled = filtered.isNotEmpty()
+            )
         }
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("حذف ارزیابی‌ها", fontWeight = FontWeight.Bold) },
+            text = { Text("${filtered.size.toPersian()} ارزیابی از لیست فعلی حذف شود؟ بعد از حذف می‌توانید با «بازگرداندن» آن‌ها را برگردانید.") },
+            confirmButton = {
+                TextButton(onClick = { onDelete(filtered.map { it.id }); confirmDelete = false }) {
+                    Text("حذف", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("انصراف") } }
+        )
     }
 
     if (filtered.isEmpty()) {
@@ -830,7 +1007,7 @@ private fun ResultsSection(
     if (personFilter.isBlank()) {
         val perPerson = done.groupBy { it.personId }
             .map { (id, list) -> Triple(id, nameOf(list.first()), list) }
-            .sortedByDescending { Evaluations.average(it.third) }
+            .sortedWith(compareBy<Triple<String, String, List<EvaluationEntry>>> { rankById[it.first] ?: 9 }.thenByDescending { Evaluations.average(it.third) })
         Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
             Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("میانگین هر نفر", fontWeight = FontWeight.Bold, color = Navy, style = MaterialTheme.typography.titleMedium)
@@ -858,48 +1035,311 @@ private fun ResultsSection(
         }
     }
 
-    // ----- entries
+    // ----- entries, one foldable group per evaluator (his name on top)
     Text(
         "ارزیابی‌ها (${done.size.toPersian()})",
         fontWeight = FontWeight.Bold,
         color = Navy,
         style = MaterialTheme.typography.titleMedium
     )
-    done.forEach { e ->
-        val lvl = Evaluations.levelOf(e.finalScore)
-        Card(
-            modifier = Modifier.fillMaxWidth().clickable { onOpen(e.id) },
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+    val groups = done.groupBy { it.evaluatorId }
+        .map { (id, list) ->
+            val name = nameById[id] ?: list.firstOrNull { it.evaluatorName.isNotBlank() }?.evaluatorName.orEmpty()
+            Triple(id, name.ifBlank { "ارزیاب نامشخص" }, list)
+        }
+        .sortedWith(compareBy<Triple<String, String, List<EvaluationEntry>>> { rankById[it.first] ?: 9 }.thenComparator { a, b -> compareNames(a.second, b.second) })
+    val flipped = flippedGroups.split(",").toSet()
+    groups.forEach { (id, evaluatorName, list) ->
+        val key = id.ifBlank { "-" }
+        val expanded = (groups.size == 1) != (key in flipped)
+        val avg = Evaluations.average(list)
+        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp)) {
+            Column(Modifier.fillMaxWidth()) {
+                Row(
+                    Modifier.fillMaxWidth()
+                        .clickable { flippedGroups = (if (key in flipped) flipped - key else flipped + key).joinToString(",") }
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Column(Modifier.weight(1f)) {
-                        Text(nameOf(e), fontWeight = FontWeight.Bold, color = Navy)
+                        Text("ارزیاب: $evaluatorName", fontWeight = FontWeight.Bold, color = Navy, style = MaterialTheme.typography.titleMedium)
                         Text(
-                            e.periodText() +
-                                if (e.evaluatorName.isNotBlank()) " • ارزیاب: ${e.evaluatorName}" else "",
+                            "${list.size.toPersian()} ارزیابی • میانگین ${formatScore(avg)}",
                             color = Color.Gray,
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
-                    Text(
-                        formatScore(e.finalScore),
-                        color = levelColor(lvl),
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.headlineSmall
-                    )
+                    Text(if (expanded) "▲" else "▼", color = Purple)
                 }
-                ScoreBar(e.finalScore / EvaluationItems.FINAL_MAX, levelColor(lvl), 8)
-                Text(
-                    "${lvl.title} • جمع ${e.total.toPersian()} از ${EvaluationItems.maxTotal.toPersian()}",
-                    color = Color.Gray,
-                    style = MaterialTheme.typography.labelSmall
-                )
+                if (expanded) {
+                    Column(
+                        Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, bottom = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        list.forEach { e ->
+                            val lvl = Evaluations.levelOf(e.finalScore)
+                            Card(
+                                modifier = Modifier.fillMaxWidth().clickable { onOpen(e.id) },
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFF7F6FD)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text(nameOf(e), fontWeight = FontWeight.Bold, color = Navy)
+                                            Text(e.periodText(), color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                                        }
+                                        Text(
+                                            formatScore(e.finalScore),
+                                            color = levelColor(lvl),
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.headlineSmall
+                                        )
+                                    }
+                                    ScoreBar(e.finalScore / EvaluationItems.FINAL_MAX, levelColor(lvl), 8)
+                                    Text(
+                                        "${lvl.title} • جمع ${e.total.toPersian()} از ${EvaluationItems.maxTotal.toPersian()}",
+                                        color = Color.Gray,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
+
+// ============================================================ advanced report
+
+private data class PersonAverage(val person: Person, val average: Double, val count: Int)
+private data class BreakdownRow(val label: String, val average: Double, val count: Int)
+
+/** Small chips, several can be on; every chip has a key, the ticked keys are kept as "a,b,c". */
+@Composable
+private fun MultiChips(title: String, options: List<Pair<String, String>>, selected: String, onChange: (String) -> Unit) {
+    val on = selected.split(",").toSet()
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, color = Color.Gray, style = MaterialTheme.typography.labelMedium)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            options.forEach { (key, label) ->
+                val isOn = key in on
+                Surface(
+                    color = if (isOn) Purple else Purple.copy(alpha = .10f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable {
+                        onChange((if (isOn) on - key else on + key).filter { it.isNotEmpty() }.joinToString(","))
+                    }
+                ) {
+                    Text(
+                        label,
+                        Modifier.fillMaxWidth().padding(vertical = 9.dp),
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        color = if (isOn) Color.White else Purple,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BreakdownBlock(title: String, rows: List<BreakdownRow>) {
+    if (rows.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, color = Purple, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+        rows.forEach { r ->
+            val color = levelColor(Evaluations.levelOf(r.average))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(r.label, Modifier.width(92.dp), color = Navy, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                Box(Modifier.weight(1f).padding(horizontal = 8.dp)) { ScoreBar(r.average / EvaluationItems.FINAL_MAX, color, 8) }
+                Text(formatScore(r.average), color = color, fontWeight = FontWeight.Bold)
+                Text(" (${r.count.toPersian()})", color = Color.Gray, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+}
+
+/**
+ * Evaluation report on demand: choose the dates, the employment kind, the type and the shifts, and get
+ * one short summary where the final number comes first.
+ */
+@Composable
+private fun AdvancedReportSection(people: List<Person>, evaluations: List<EvaluationEntry>) {
+    val context = LocalContext.current
+    val today = LocalDate.now().toEpochDay()
+    var fromEpoch by rememberSaveable { mutableStateOf(evaluations.minOfOrNull { it.date.toEpochDay() } ?: today) }
+    var toEpoch by rememberSaveable { mutableStateOf(evaluations.maxOfOrNull { it.dateTo.toEpochDay() } ?: today) }
+    var empText by rememberSaveable { mutableStateOf(Employment.entries.joinToString(",") { it.name }) }
+    var catText by rememberSaveable { mutableStateOf(Category.entries.joinToString(",") { it.name }) }
+    var shiftText by rememberSaveable { mutableStateOf((SHIFT_NAMES + "-").joinToString(",")) }
+    var picker by rememberSaveable { mutableStateOf(0) } // 0 closed, 1 from, 2 to
+
+    val fromDate = LocalDate.ofEpochDay(fromEpoch)
+    val toDate = LocalDate.ofEpochDay(toEpoch)
+    val emps = empText.split(",").toSet()
+    val cats = catText.split(",").toSet()
+    val shifts = shiftText.split(",").toSet()
+    val byId = remember(people) { people.associateBy { it.id } }
+
+    val matched = evaluations.filter { e ->
+        val p = byId[e.personId]
+        e.isComplete &&
+            e.dateTo >= fromDate && e.date <= toDate &&
+            p != null &&
+            p.employment.name in emps && p.category.name in cats &&
+            p.shiftName.ifBlank { "-" } in shifts
+    }
+    val average = Evaluations.average(matched)
+    val level = Evaluations.levelOf(average)
+    val perPerson = matched.groupBy { it.personId }
+        .map { (id, list) -> PersonAverage(byId.getValue(id), Evaluations.average(list), list.size) }
+        .sortedWith(compareBy<PersonAverage> { it.person.shiftRank }.thenByDescending { it.average })
+
+    fun rowsBy(groups: List<Pair<String, (Person) -> Boolean>>) = groups.mapNotNull { (label, test) ->
+        val list = matched.filter { e -> byId[e.personId]?.let(test) == true }
+        if (list.isEmpty()) null else BreakdownRow(label, Evaluations.average(list), list.size)
+    }
+    val byEmployment = rowsBy(Employment.entries.map { emp -> emp.title to { p: Person -> p.employment == emp } })
+    val byCategory = rowsBy(Category.entries.map { cat -> cat.title to { p: Person -> p.category == cat } })
+    val byShift = rowsBy(
+        SHIFT_NAMES.map { s -> "شیفت $s" to { p: Person -> p.shiftName == s } } +
+            ("بدون شیفت" to { p: Person -> p.shiftName !in SHIFT_NAMES })
+    )
+
+    // ----- what to include
+    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("گزارش پیشرفته", fontWeight = FontWeight.Bold, color = Navy, style = MaterialTheme.typography.titleMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { picker = 1 }, modifier = Modifier.weight(1f)) {
+                    Text("از: ${JalaliDate.from(fromDate).display()}")
+                }
+                OutlinedButton(onClick = { picker = 2 }, modifier = Modifier.weight(1f)) {
+                    Text("تا: ${JalaliDate.from(toDate).display()}")
+                }
+            }
+            MultiChips("وضعیت استخدامی", Employment.entries.map { it.name to it.title }, empText) { empText = it }
+            MultiChips("نوع", Category.entries.map { it.name to it.title }, catText) { catText = it }
+            MultiChips("شیفت", SHIFT_NAMES.map { it to it } + ("-" to "بدون"), shiftText) { shiftText = it }
+        }
+    }
+
+    if (matched.isEmpty()) {
+        EmptyMessage(
+            if (evaluations.none { it.isComplete }) "هنوز ارزیابی کاملی ثبت نشده است."
+            else "با این انتخاب‌ها ارزیابی کاملی پیدا نشد. بازه یا گروه‌ها را تغییر دهید."
+        )
+    } else {
+        // ----- the final number
+        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+            Column(
+                Modifier.fillMaxWidth().padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("نمرهٔ نهایی", color = Purple, fontWeight = FontWeight.Bold)
+                ScoreBadge(average, big = true)
+                ScoreBar(average / EvaluationItems.FINAL_MAX, levelColor(level), 12)
+                Text(
+                    "سطح: ${level.title} • ${matched.size.toPersian()} ارزیابی • ${perPerson.size.toPersian()} نفر",
+                    color = Color.Gray,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(periodText(fromDate, toDate), color = Color.Gray, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+
+        // ----- split by kind
+        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                BreakdownBlock("وضعیت استخدامی", byEmployment)
+                BreakdownBlock("نوع", byCategory)
+                BreakdownBlock("شیفت", byShift)
+            }
+        }
+
+        // ----- every person, shift A first
+        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("نمرهٔ نهایی هر نفر", fontWeight = FontWeight.Bold, color = Navy, style = MaterialTheme.typography.titleMedium)
+                perPerson.forEach { pa ->
+                    val color = levelColor(Evaluations.levelOf(pa.average))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(pa.person.name, fontWeight = FontWeight.Bold, color = Navy)
+                            Text(
+                                (if (pa.person.shiftName.isNotBlank()) "شیفت ${pa.person.shiftName} • " else "") +
+                                    "${pa.person.employment.title} • ${pa.person.category.title} • ${pa.count.toPersian()} ارزیابی",
+                                color = Color.Gray,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                        Text(formatScore(pa.average), color = color, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                    }
+                }
+            }
+        }
+
+        Button(
+            onClick = {
+                shareText(
+                    context,
+                    buildAdvancedText(
+                        fromDate, toDate, average, level.title, matched.size, perPerson,
+                        listOf("وضعیت استخدامی" to byEmployment, "نوع" to byCategory, "شیفت" to byShift)
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("ارسال گزارش") }
+    }
+
+    if (picker != 0) {
+        JalaliDatePickerDialog(
+            initial = if (picker == 1) fromDate else toDate,
+            title = if (picker == 1) "تاریخ شروع" else "تاریخ پایان",
+            onDismiss = { picker = 0 },
+            onPick = { d ->
+                if (picker == 1) {
+                    fromEpoch = d.toEpochDay()
+                    if (toEpoch < fromEpoch) toEpoch = fromEpoch
+                } else {
+                    toEpoch = d.toEpochDay()
+                    if (fromEpoch > toEpoch) fromEpoch = toEpoch
+                }
+                picker = 0
+            }
+        )
+    }
+}
+
+private fun buildAdvancedText(
+    from: LocalDate,
+    to: LocalDate,
+    average: Double,
+    levelTitle: String,
+    evaluationCount: Int,
+    perPerson: List<PersonAverage>,
+    blocks: List<Pair<String, List<BreakdownRow>>>
+): String = buildString {
+    appendLine("گزارش ارزیابی • ${periodText(from, to)}")
+    appendLine("نمرهٔ نهایی: ${formatScore(average)} از ${EvaluationItems.FINAL_MAX.toPersian()} ($levelTitle)")
+    appendLine("${evaluationCount.toPersian()} ارزیابی • ${perPerson.size.toPersian()} نفر")
+    blocks.filter { it.second.isNotEmpty() }.forEach { (title, rows) ->
+        appendLine()
+        appendLine(title)
+        rows.forEach { appendLine("• ${it.label}: ${formatScore(it.average)} (${it.count.toPersian()})") }
+    }
+    appendLine()
+    appendLine("هر نفر")
+    perPerson.forEach { appendLine("• ${it.person.name}: ${formatScore(it.average)}") }
+}.trim()
 
 @Composable
 private fun ScoreBadge(score: Double, big: Boolean) {

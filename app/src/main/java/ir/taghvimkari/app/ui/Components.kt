@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -263,14 +264,37 @@ fun ExchangeBar(
     onReceive: () -> Unit
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
-        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = onSend, enabled = sendEnabled, modifier = Modifier.weight(1f)) { Text("ارسال") }
-                OutlinedButton(onClick = onReceive, modifier = Modifier.weight(1f)) { Text("دریافت") }
+        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+            ExchangeRow(sendEnabled, sendFailed, onSend, onReceive)
+        }
+    }
+}
+
+/** The buttons of [ExchangeBar] without a card around them, so they can sit inside another card; [onDelete] adds «حذف». */
+@Composable
+fun ExchangeRow(
+    sendEnabled: Boolean,
+    sendFailed: Boolean,
+    onSend: () -> Unit,
+    onReceive: () -> Unit,
+    onDelete: (() -> Unit)? = null,
+    deleteEnabled: Boolean = true
+) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = onSend, enabled = sendEnabled, modifier = Modifier.weight(1f)) { Text("ارسال") }
+            OutlinedButton(onClick = onReceive, modifier = Modifier.weight(1f)) { Text("دریافت") }
+            if (onDelete != null) {
+                OutlinedButton(
+                    onClick = onDelete,
+                    enabled = deleteEnabled,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.weight(1f)
+                ) { Text("حذف") }
             }
-            if (sendFailed) {
-                Text("ارسال انجام نشد.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
+        }
+        if (sendFailed) {
+            Text("ارسال انجام نشد.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

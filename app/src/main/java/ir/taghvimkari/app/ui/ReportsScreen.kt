@@ -51,10 +51,12 @@ import ir.taghvimkari.app.domain.JalaliDate
 import ir.taghvimkari.app.domain.Person
 import ir.taghvimkari.app.domain.ReportEntry
 import ir.taghvimkari.app.domain.ReportPeriod
+import ir.taghvimkari.app.domain.ReportTotals
 import ir.taghvimkari.app.domain.buildReportText
 import ir.taghvimkari.app.domain.formatHours
 import ir.taghvimkari.app.domain.parseHours
-import ir.taghvimkari.app.domain.sortedAlphabetically
+import ir.taghvimkari.app.domain.shiftRank
+import ir.taghvimkari.app.domain.sortedByShiftName
 import ir.taghvimkari.app.domain.toPersian
 import ir.taghvimkari.app.domain.totals
 import java.time.LocalDate
@@ -90,18 +92,19 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
 
     val labelled = remember(people) { uniqueLabels(people) }
     val nameById = remember(people) { people.associate { it.id to it.name } }
+    val rankById = remember(people) { people.associate { it.id to it.shiftRank } }
     val nameOf: (ReportEntry) -> String = { e -> nameById[e.personId] ?: e.personName }
 
     val period = remember(mode, customFrom, customTo) { periodFor(mode, todayJalali, customFrom, customTo) }
     val filtered = reports
         .filter { period.contains(it.date) && (personFilter.isBlank() || it.personId == personFilter) }
-        .sortedWith(compareByDescending<ReportEntry> { it.date }.thenBy { nameOf(it) })
+        .sortedWith(compareBy<ReportEntry> { rankById[it.personId] ?: 9 }.thenByDescending { it.date }.thenBy { nameOf(it) })
     val totals = filtered.totals()
     val filterLabel = labelled.firstOrNull { it.first.id == personFilter }?.second ?: ALL_PEOPLE
     val perPerson = if (personFilter.isBlank()) {
         filtered.groupBy { it.personId }
             .map { (id, list) -> Triple(id, nameOf(list.first()), list.totals()) }
-            .sortedByDescending { it.third.net }
+            .sortedWith(compareBy<Triple<String, String, ReportTotals>> { rankById[it.first] ?: 9 }.thenByDescending { it.third.net })
     } else {
         emptyList()
     }
@@ -110,9 +113,9 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Button(onClick = { showNew = true }, enabled = people.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("+ ثبت گزارش") }
+        Button(onClick = { showNew = true }, enabled = people.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("+ ثبت سابقه") }
         if (people.isEmpty()) {
-            EmptyMessage("ابتدا در بخش «نیروها» افراد را ثبت کنید، بعد برایشان گزارش بنویسید.")
+            EmptyMessage("ابتدا در بخش «نیروها» افراد را ثبت کنید، بعد برایشان سابقه ثبت کنید.")
         }
 
         // ----- filters
@@ -170,7 +173,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
             },
             enabled = filtered.isNotEmpty(),
             modifier = Modifier.fillMaxWidth()
-        ) { Text("ارسال گزارش متنی") }
+        ) { Text("ارسال سوابق متنی") }
 
         // ----- summary
         Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
@@ -192,7 +195,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
                 }
                 ShareBar(totals.reward, totals.punishment, height = 12.dp)
                 Text(
-                    "${totals.count.toPersian()} گزارش در این بازه",
+                    "${totals.count.toPersian()} سابقه در این بازه",
                     color = Color.Gray,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -216,7 +219,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
                             }
                             ShareBar(t.reward, t.punishment, height = 8.dp)
                             Text(
-                                "تشویق ${formatHours(t.reward)} • تنبیه ${formatHours(t.punishment)} • ${t.count.toPersian()} گزارش",
+                                "تشویق ${formatHours(t.reward)} • تنبیه ${formatHours(t.punishment)} • ${t.count.toPersian()} سابقه",
                                 color = Color.Gray,
                                 style = MaterialTheme.typography.labelSmall
                             )
@@ -228,13 +231,13 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
 
         // ----- entries
         Text(
-            "گزارش‌ها (${filtered.size.toPersian()})",
+            "سوابق (${filtered.size.toPersian()})",
             fontWeight = FontWeight.Bold,
             color = Navy,
             style = MaterialTheme.typography.titleMedium
         )
         if (filtered.isEmpty()) {
-            EmptyMessage("در این بازه گزارشی ثبت نشده است.")
+            EmptyMessage("در این بازه سابقه‌ای ثبت نشده است.")
         }
         filtered.forEach { e -> ReportCard(e, nameOf(e)) { editingId = e.id } }
     }
@@ -368,7 +371,7 @@ private fun ReportEntryDialog(
 
     FormDialog(
         onDismiss = onDismiss,
-        title = if (initial == null) "ثبت گزارش جدید" else "ویرایش گزارش",
+        title = if (initial == null) "ثبت سابقهٔ جدید" else "ویرایش سابقه",
         content = {
                 PersonSearchField(
                     label = "نفر",
@@ -385,7 +388,7 @@ private fun ReportEntryDialog(
                 }
                 OutlinedTextField(
                     value = title, onValueChange = { title = it },
-                    label = { Text("گزارش (موضوع)") },
+                    label = { Text("سابقه (موضوع)") },
                     minLines = 2,
                     isError = showErrors && title.isBlank(),
                     modifier = Modifier.fillMaxWidth()
@@ -447,7 +450,7 @@ private fun ReportEntryDialog(
     if (showPicker) {
         JalaliDatePickerDialog(
             initial = date,
-            title = "تاریخ گزارش",
+            title = "تاریخ سابقه",
             onDismiss = { showPicker = false },
             onPick = { dateEpoch = it.toEpochDay(); showPicker = false }
         )
@@ -457,7 +460,7 @@ private fun ReportEntryDialog(
 /** People in alphabetical order; equal names get a number so labels stay unique. */
 internal fun uniqueLabels(people: List<Person>): List<Pair<Person, String>> {
     val counts = HashMap<String, Int>()
-    return people.sortedAlphabetically { it.name }.map { p ->
+    return people.sortedByShiftName().map { p ->
         val n = (counts[p.name] ?: 0) + 1
         counts[p.name] = n
         p to if (n == 1) p.name else "${p.name} (${n.toPersian()})"
@@ -489,6 +492,6 @@ private fun periodFor(mode: Int, now: JalaliDate, customFrom: Long, customTo: Lo
 internal fun shareText(context: Context, text: String) {
     val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
     runCatching {
-        context.startActivity(Intent.createChooser(send, "ارسال گزارش").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        context.startActivity(Intent.createChooser(send, "ارسال سوابق").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 }

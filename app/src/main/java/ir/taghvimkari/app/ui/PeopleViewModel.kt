@@ -14,6 +14,8 @@ import ir.taghvimkari.app.data.DataExchange
 import ir.taghvimkari.app.data.ExchangeData
 import ir.taghvimkari.app.data.Incoming
 import ir.taghvimkari.app.data.EvaluationStore
+import ir.taghvimkari.app.data.SummaryStore
+import ir.taghvimkari.app.domain.SummaryCell
 import ir.taghvimkari.app.data.ReportStore
 import ir.taghvimkari.app.data.LocalStore
 import ir.taghvimkari.app.data.UpdateChecker
@@ -56,6 +58,7 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
     private val store = LocalStore(app)
     private val reportStore = ReportStore(app)
     private val evaluationStore = EvaluationStore(app)
+    private val summaryStore = SummaryStore(app)
     private val uiPrefs = UiPrefs(app)
     private val backupPrefs = BackupPrefs(app)
     private var checkInFlight = false
@@ -69,6 +72,20 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
 
     var evaluations: List<EvaluationEntry> by mutableStateOf(evaluationStore.load())
         private set
+
+    /** Hand-typed cells of the جمع‌بندی table. */
+    var summaryCells: List<SummaryCell> by mutableStateOf(summaryStore.load())
+        private set
+
+    /** Changes one person's typed cells for one period; a cell with nothing left in it is dropped. */
+    fun updateSummary(personId: String, periodKey: String, change: (SummaryCell) -> SummaryCell) {
+        val old = summaryCells.firstOrNull { it.personId == personId && it.periodKey == periodKey }
+            ?: SummaryCell(personId, periodKey)
+        val new = change(old)
+        val rest = summaryCells.filterNot { it.personId == personId && it.periodKey == periodKey }
+        summaryCells = if (new.isEmpty) rest else rest + new
+        summaryStore.save(summaryCells)
+    }
 
     var updateUi: UpdateUi by mutableStateOf(UpdateUi.Idle)
         private set
@@ -248,7 +265,7 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
         val removed = reports.getOrNull(index) ?: return
         reports = reports.filterNot { it.id == id }
         reportStore.save(reports)
-        offerUndo("گزارش «${removed.title}» حذف شد") {
+        offerUndo("سابقهٔ «${removed.title}» حذف شد") {
             reports = restoreAt(reports, removed, index) { it.id == removed.id }
             reportStore.save(reports)
         }
@@ -271,6 +288,18 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
         evaluationStore.save(evaluations)
         offerUndo("ارزیابی «${removed.personName}» حذف شد") {
             evaluations = restoreAt(evaluations, removed, index) { it.id == removed.id }
+            evaluationStore.save(evaluations)
+        }
+    }
+
+    /** Deletes several evaluations at once (the filtered result list); one snackbar takes all of them back. */
+    fun deleteEvaluations(ids: Set<String>) {
+        val removed = evaluations.filter { it.id in ids }
+        if (removed.isEmpty()) return
+        evaluations = evaluations.filterNot { it.id in ids }
+        evaluationStore.save(evaluations)
+        offerUndo("${removed.size} ارزیابی حذف شد") {
+            evaluations = evaluations + removed.filter { r -> evaluations.none { it.id == r.id } }
             evaluationStore.save(evaluations)
         }
     }
