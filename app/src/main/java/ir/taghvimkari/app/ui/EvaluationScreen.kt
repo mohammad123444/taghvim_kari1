@@ -690,7 +690,7 @@ private fun ChoiceChips(options: List<String>, selected: Int, onSelect: (Int) ->
 }
 
 /** Equal names get a number so each label is unique. */
-private fun numberedLabels(names: List<String>): List<String> {
+internal fun numberedLabels(names: List<String>): List<String> {
     val counts = HashMap<String, Int>()
     return names.map { n ->
         val k = (counts[n] ?: 0) + 1

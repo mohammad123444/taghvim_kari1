@@ -64,8 +64,8 @@ import java.time.LocalDate
 import java.util.UUID
 import kotlin.math.abs
 
-private const val ALL_PEOPLE = "همه نفرات"
-private val PERIOD_LABELS = listOf("این ماه", "ماه قبل", "امسال", "همه", "بازه دلخواه")
+internal const val ALL_PEOPLE = "همه نفرات"
+internal val PERIOD_LABELS = listOf("این ماه", "ماه قبل", "امسال", "همه", "بازه دلخواه")
 
 /** Reward / punishment reports: write them down per person, then review any month, year or custom period. */
 @Composable
@@ -494,7 +494,7 @@ private fun monthPeriod(year: Int, month: Int) = ReportPeriod(
     JalaliDate(year, month, JalaliDate.monthLength(year, month)).toLocalDate()
 )
 
-private fun periodFor(mode: Int, now: JalaliDate, customFrom: Long, customTo: Long): ReportPeriod = when (mode) {
+internal fun periodFor(mode: Int, now: JalaliDate, customFrom: Long, customTo: Long): ReportPeriod = when (mode) {
     0 -> monthPeriod(now.year, now.month)
     1 -> if (now.month == 1) monthPeriod(now.year - 1, 12) else monthPeriod(now.year, now.month - 1)
     2 -> ReportPeriod(
