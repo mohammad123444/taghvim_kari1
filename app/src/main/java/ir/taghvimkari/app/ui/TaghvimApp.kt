@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -73,13 +74,9 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
     var pageBeforeSettings by rememberSaveable { mutableStateOf(0) }
     var showAdd by rememberSaveable { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Person?>(null) }
-    var peopleSendFailed by rememberSaveable { mutableStateOf(false) }
     var showCompare by rememberSaveable { mutableStateOf(false) }
     var transferringId by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
-    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) viewModel.offerImport(uri)
-    }
     // While the keyboard is open the bottom bar is hidden and the content ends right above the keyboard,
     // so text boxes and their buttons are never covered by the keyboard or the phone's navigation buttons.
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
@@ -137,14 +134,12 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
                     people = viewModel.people,
                     onAdd = { showAdd = true },
                     onEdit = { editing = it },
-                    sendFailed = peopleSendFailed,
-                    onSend = { peopleSendFailed = !DataExchange.sharePeople(context, viewModel.people) },
-                    onReceive = { filePicker.launch(arrayOf("*/*")) },
                     onCompare = { showCompare = true }
                 )
                 3 -> ReportsScreen(viewModel)
                 PAGE_EVALUATION -> EvaluationScreen(viewModel)
                 PAGE_SUMMARY -> SummaryScreen(viewModel)
+                PAGE_EXCHANGE -> ExchangeScreen(viewModel)
                 else -> SettingsScreen(viewModel)
             }
             }
@@ -299,9 +294,10 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
 private const val PAGE_EVALUATION = 4
 private const val PAGE_SETTINGS = 5
 private const val PAGE_SUMMARY = 6
+private const val PAGE_EXCHANGE = 7
 
 /** The blue header shows the title of the current page (indexes as in the bottom bar; 5 = settings). */
-private val PAGE_TITLES = listOf("تقویم", "مدیریت نیروها", "مقایسه", "سوابق تشویق و تنبیه", "ارزیابی نیروها", "تنظیمات", "جمع‌بندی")
+private val PAGE_TITLES = listOf("تقویم", "مدیریت نیروها", "مقایسه", "سوابق تشویق و تنبیه", "ارزیابی نیروها", "تنظیمات", "جمع‌بندی", "گزارش")
 
 @Composable
 private fun AppHeader(title: String, settingsOpen: Boolean, onSettings: () -> Unit) {
@@ -377,6 +373,10 @@ private fun AppNavigation(selected: Int, onSelect: (Int) -> Unit) {
         NavigationBarItem(
             selected = selected == PAGE_SUMMARY, onClick = { onSelect(PAGE_SUMMARY) },
             icon = { Icon(Icons.Default.Check, contentDescription = null) }, label = { Text("جمع‌بندی", maxLines = 1) }
+        )
+        NavigationBarItem(
+            selected = selected == PAGE_EXCHANGE, onClick = { onSelect(PAGE_EXCHANGE) },
+            icon = { Icon(Icons.Default.Share, contentDescription = null) }, label = { Text("گزارش", maxLines = 1) }
         )
     }
 }

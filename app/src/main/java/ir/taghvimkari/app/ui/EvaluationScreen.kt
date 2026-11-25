@@ -36,6 +36,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -128,15 +129,10 @@ fun EvaluationScreen(viewModel: PeopleViewModel) {
     var resultsView by rememberSaveable { mutableStateOf(0) } // inside «نتایج و گزارش»: 0 list, 1 advanced report
     var formOpen by rememberSaveable { mutableStateOf(false) }
     var detailId by rememberSaveable { mutableStateOf<String?>(null) }
-    var sendFailed by rememberSaveable { mutableStateOf(false) }
     var returnMode by rememberSaveable { mutableStateOf(0) }      // the page to go back to when a round ends
     var finishedCount by rememberSaveable { mutableStateOf(0) }   // > 0 shows «خاتمه ارزیابی»
     var clearSignal by rememberSaveable { mutableStateOf(0) }     // clears the ticked people on the new-evaluation page
     val context = LocalContext.current
-
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) viewModel.offerImport(uri)
-    }
 
     fun startSession(evaluatorId: String, personIds: List<String>, fromEpoch: Long, toEpoch: Long) {
         viewModel.startDraft(evaluatorId, personIds, fromEpoch, toEpoch)
@@ -183,11 +179,8 @@ fun EvaluationScreen(viewModel: PeopleViewModel) {
                 ResultsSection(
                     people = people,
                     evaluations = evaluations,
-                    sendFailed = sendFailed,
                     onOpen = { detailId = it },
                     onResume = { e -> startSession(e.evaluatorId, listOf(e.personId), e.date.toEpochDay(), e.dateTo.toEpochDay()) },
-                    onSend = { list -> sendFailed = !DataExchange.shareEvaluations(context, list) },
-                    onReceive = { picker.launch(arrayOf("*/*")) },
                     onDelete = { ids -> viewModel.deleteEvaluations(ids.toSet()) }
                 )
             }
@@ -905,11 +898,8 @@ private fun EvaluationFormDialog(
 private fun ResultsSection(
     people: List<Person>,
     evaluations: List<EvaluationEntry>,
-    sendFailed: Boolean,
     onOpen: (String) -> Unit,
     onResume: (EvaluationEntry) -> Unit,
-    onSend: (List<EvaluationEntry>) -> Unit,
-    onReceive: () -> Unit,
     onDelete: (List<String>) -> Unit
 ) {
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
@@ -941,9 +931,9 @@ private fun ResultsSection(
         }
         .sortedWith(compareBy<EvaluationEntry> { rankById[it.personId] ?: 9 }.thenByDescending { it.date }.thenBy { nameOf(it) })
 
-    // ----- filters, search and send / receive: folded until needed, a dot shows while a filter is on
+    // ----- filters and delete: folded until needed, a dot shows while a filter is on
     FoldBox(
-        "فیلتر و ارسال/دریافت",
+        "فیلتر",
         active = periodFilter.isNotBlank() || personFilter.isNotBlank() || evaluatorFilter.isNotBlank()
     ) {
             if (periods.isNotEmpty()) {
@@ -971,15 +961,13 @@ private fun ResultsSection(
                     evaluatorFilter = evaluatorList.getOrNull(evaluatorLabels.indexOf(label))?.first ?: ""
                 }
             }
-            // send / receive / delete sit under all the filters and work on the filtered list
-            ExchangeRow(
-                sendEnabled = filtered.isNotEmpty(),
-                sendFailed = sendFailed,
-                onSend = { onSend(filtered) },
-                onReceive = onReceive,
-                onDelete = { confirmDelete = true },
-                deleteEnabled = filtered.isNotEmpty()
-            )
+            // delete sits under all the filters and works on the filtered list
+            OutlinedButton(
+                onClick = { confirmDelete = true },
+                enabled = filtered.isNotEmpty(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("حذف") }
     }
 
     if (confirmDelete) {

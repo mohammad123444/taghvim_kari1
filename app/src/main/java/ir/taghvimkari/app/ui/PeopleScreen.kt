@@ -45,9 +45,6 @@ fun PeopleScreen(
     people: List<Person>,
     onAdd: () -> Unit,
     onEdit: (Person) -> Unit,
-    sendFailed: Boolean,
-    onSend: () -> Unit,
-    onReceive: () -> Unit,
     onCompare: () -> Unit
 ) {
     var query by rememberSaveable { mutableStateOf("") }
@@ -64,25 +61,14 @@ fun PeopleScreen(
             Button(onClick = onAdd, modifier = Modifier.weight(1f)) { Text("+ افزودن نیرو") }
             Button(onClick = onCompare, modifier = Modifier.weight(1f)) { Text("مقایسهٔ نیروها") }
         }
-        // Search and send / receive stay folded until needed; the dot shows while a search is on.
-        FoldBox("جستجو و ارسال/دریافت", active = searching) {
+        // Search stays folded until needed; the dot shows while a search is on.
+        FoldBox("جستجو", active = searching) {
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
                 modifier = Modifier.fillMaxWidth().keepVisibleWhenFocused(),
                 label = { Text("جستجو بر اساس نام (حداقل ${MIN_SEARCH_CHARS.toPersian()} حرف)") },
                 singleLine = true
-            )
-            ExchangeRow(
-                sendEnabled = people.isNotEmpty(),
-                sendFailed = sendFailed,
-                onSend = onSend,
-                onReceive = onReceive
-            )
-            Text(
-                "فایل دریافتی، فهرست نیروهای فعلی را کاملاً جایگزین می‌کند (ادغام نمی‌شود) و نام‌های تکراری حذف می‌شوند.",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray
             )
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -70,7 +70,6 @@ private val PERIOD_LABELS = listOf("این ماه", "ماه قبل", "امسال
 /** Reward / punishment reports: write them down per person, then review any month, year or custom period. */
 @Composable
 fun ReportsScreen(viewModel: PeopleViewModel) {
-    val context = LocalContext.current
     val today = remember { LocalDate.now() }
     val todayJalali = remember { JalaliDate.from(today) }
     val people = viewModel.people
@@ -85,12 +84,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
     var personFilter by rememberSaveable { mutableStateOf("") }
     var showNew by rememberSaveable { mutableStateOf(false) }
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
-    var sendFailed by rememberSaveable { mutableStateOf(false) }
     var toolsOpen by rememberSaveable { mutableStateOf(false) }
-
-    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) viewModel.offerImport(uri)
-    }
 
     // Reports can be reviewed for everybody (also people who left); new records are only written for active people.
     val labelled = remember(people) { uniqueLabels(people).map { (p, n) -> p to if (p.active) n else "$n (غیرفعال)" } }
@@ -169,12 +163,6 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
                     selectedId = personFilter,
                     onSelect = { personFilter = it }
                 )
-                    ExchangeRow(
-                        sendEnabled = filtered.isNotEmpty(),
-                        sendFailed = sendFailed,
-                        onSend = { sendFailed = !DataExchange.shareReports(context, filtered) },
-                        onReceive = { filePicker.launch(arrayOf("*/*")) }
-                    )
             }
         }
 
