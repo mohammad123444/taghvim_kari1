@@ -62,8 +62,6 @@ import java.time.LocalDate
 
 private val NAME_W = 112.dp
 private val COL_W = 70.dp
-private val SumGreen = Color(0xFF2E9E5B)
-private val SumRed = Color(0xFFD64545)
 
 private fun monthRange(year: Int, month: Int): Pair<LocalDate, LocalDate> =
     JalaliDate(year, month, 1).toLocalDate() to
@@ -131,10 +129,9 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(CardGap)
     ) {
-        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
-            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        AppCard(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("بازهٔ جمع‌بندی", fontWeight = FontWeight.Bold, color = Navy, style = MaterialTheme.typography.titleMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { picker = 1 }, modifier = Modifier.weight(1f)) {
@@ -162,12 +159,26 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
                         modifier = Modifier.weight(1f)
                     ) { Text("ماه قبل") }
                 }
-                OutlinedTextField(
-                    value = query, onValueChange = { query = it },
-                    label = { Text("جستجوی نام") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+        }
+
+        // Search and send / receive stay folded until needed; the dot shows while a search is on.
+        FoldBox("جستجو و ارسال/دریافت", active = query.isNotBlank()) {
+            OutlinedTextField(
+                value = query, onValueChange = { query = it },
+                label = { Text("جستجوی نام") }, singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            ExchangeRow(
+                sendEnabled = viewModel.summaryCells.isNotEmpty(),
+                sendFailed = sendFailed,
+                onSend = { sendFailed = !DataExchange.shareSummary(context, viewModel.summaryCells) },
+                onReceive = { filePicker.launch(arrayOf("*/*")) }
+            )
+            OutlinedButton(
+                onClick = { shareText(context, buildSummaryText(from, to, rows)) },
+                enabled = rows.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("ارسال جدول به صورت متن") }
         }
 
         if (rows.isEmpty()) {
@@ -176,7 +187,7 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
             )
         } else {
             val tableWidth = NAME_W + COL_W * 5
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+            AppCard {
                 Column(Modifier.horizontalScroll(rememberScrollState()).width(tableWidth)) {
                     Employment.entries.forEach { emp ->
                         val group = rows.filter { it.person.employment == emp }
@@ -232,8 +243,8 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
                                     SummaryCellBox(
                                         COL_W, formatSigned(r.reward),
                                         when {
-                                            r.reward > 0 -> SumGreen
-                                            r.reward < 0 -> SumRed
+                                            r.reward > 0 -> RewardGreen
+                                            r.reward < 0 -> PunishRed
                                             else -> Color.Gray
                                         },
                                         bold = r.reward != 0.0
@@ -250,16 +261,6 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
                 color = Color.Gray,
                 style = MaterialTheme.typography.bodySmall
             )
-            ExchangeRow(
-                sendEnabled = viewModel.summaryCells.isNotEmpty(),
-                sendFailed = sendFailed,
-                onSend = { sendFailed = !DataExchange.shareSummary(context, viewModel.summaryCells) },
-                onReceive = { filePicker.launch(arrayOf("*/*")) }
-            )
-            OutlinedButton(
-                onClick = { shareText(context, buildSummaryText(from, to, rows)) },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("ارسال جدول به صورت متن") }
         }
     }
 

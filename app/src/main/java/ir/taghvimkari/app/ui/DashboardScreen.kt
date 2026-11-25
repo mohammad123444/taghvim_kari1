@@ -74,7 +74,7 @@ fun DashboardScreen(people: List<Person>) {
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(CardGap)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(

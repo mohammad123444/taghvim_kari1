@@ -52,7 +52,7 @@ fun SettingsScreen(viewModel: PeopleViewModel) {
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(CardGap)
     ) {
         SettingsCard(
             "اطلاعات ذخیره‌شده"
@@ -126,8 +126,7 @@ fun SettingsScreen(viewModel: PeopleViewModel) {
 
 @Composable
 private fun SettingsCard(title: String, content: @Composable () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    AppCard(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     title,
@@ -138,6 +137,5 @@ private fun SettingsCard(title: String, content: @Composable () -> Unit) {
                 )
             }
             content()
-        }
     }
 }

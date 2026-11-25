@@ -57,43 +57,45 @@ fun PeopleScreen(
     val filtered = people
         .filter { it.name.contains(query.trim(), ignoreCase = true) }
         .sortedByTeam(leaderNames) { it }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(CardGap)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onAdd, modifier = Modifier.weight(1f)) { Text("+ افزودن نیرو") }
+            Button(onClick = onCompare, modifier = Modifier.weight(1f)) { Text("مقایسهٔ نیروها") }
+        }
+        // Search and send / receive stay folded until needed; the dot shows while a search is on.
+        FoldBox("جستجو و ارسال/دریافت", active = query.isNotBlank()) {
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
                 label = { Text("جستجو بر اساس نام") },
                 singleLine = true
             )
-            FilledIconButton(onClick = onAdd) { Icon(Icons.Default.Add, contentDescription = "افزودن نیرو") }
+            ExchangeRow(
+                sendEnabled = people.isNotEmpty(),
+                sendFailed = sendFailed,
+                onSend = onSend,
+                onReceive = onReceive
+            )
         }
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = { showPicker = true }, modifier = Modifier.weight(1f)) {
-                Text("وضعیت در تاریخ: ${JalaliDate.from(date).display()}")
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = { showPicker = true }, modifier = Modifier.weight(1f)) {
+                    Text("وضعیت در تاریخ: ${JalaliDate.from(date).display()}")
+                }
+                if (!isToday) {
+                    TextButton(onClick = { dateEpoch = LocalDate.now().toEpochDay() }) { Text("امروز") }
+                }
             }
-            if (!isToday) {
-                TextButton(onClick = { dateEpoch = LocalDate.now().toEpochDay() }) { Text("امروز") }
-            }
+            Text(
+                JalaliDate.longText(date),
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
         }
-        Text(
-            JalaliDate.longText(date),
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
-        Button(onClick = onCompare, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("مقایسهٔ نیروها") }
-        Spacer(Modifier.height(8.dp))
         if (filtered.isEmpty()) EmptyMessage("نیرویی پیدا نشد.")
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            item {
-                ExchangeBar(
-                    sendEnabled = people.isNotEmpty(),
-                    sendFailed = sendFailed,
-                    onSend = onSend,
-                    onReceive = onReceive
-                )
-            }
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(CardGap)) {
             items(filtered, key = { it.id }) { p ->
                 Row(
                     Modifier.padding(start = if (p.leaderId != null && !p.isLeader) 20.dp else 0.dp),

@@ -1,5 +1,6 @@
 package ir.taghvimkari.app.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import android.view.WindowManager
 import androidx.compose.foundation.layout.Arrangement
@@ -49,6 +50,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -98,12 +100,8 @@ fun PersonCard(person: Person, status: DayStatus? = null, leaderName: String? = 
         Employment.CONTRACTUAL -> Green
         Employment.CONTRACTOR -> Orange
     }
-    Card(
-        modifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        shape = RoundedCornerShape(14.dp)
-    ) {
-        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+    AppCard(onClick = onClick) {
+        Column(Modifier.fillMaxWidth()) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
@@ -253,24 +251,86 @@ fun ScrollText(text: String) {
 }
 
 /**
- * The send / receive box of one section (staff, evaluations or reports). Every section has its own,
- * separate file: sending one kind of data never includes the others.
+ * The one white card of the app: corner 18dp, a light shadow and 14dp inside. Every page uses this instead of
+ * its own Card, so cards look the same everywhere. Put the gap between cards in the parent with [CardGap].
  */
 @Composable
-fun ExchangeBar(
-    sendEnabled: Boolean,
-    sendFailed: Boolean,
-    onSend: () -> Unit,
-    onReceive: () -> Unit
+fun AppCard(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    border: BorderStroke? = null,
+    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
+    horizontalAlignment: Alignment.Horizontal = Alignment.Start,
+    content: @Composable ColumnScope.() -> Unit
 ) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
-        Column(Modifier.fillMaxWidth().padding(12.dp)) {
-            ExchangeRow(sendEnabled, sendFailed, onSend, onReceive)
+    Card(
+        modifier = modifier.fillMaxWidth().let { if (onClick != null) it.clickable(onClick = onClick) else it },
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(18.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = border
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = verticalArrangement,
+            horizontalAlignment = horizontalAlignment,
+            content = content
+        )
+    }
+}
+
+/**
+ * The button that opens / closes a folded box («گزارش‌گیری ▼»). When [active] (a filter is on) a small dot shows
+ * beside the title, with the words «فیلتر فعال» too when [showLabel] is on and there is room.
+ */
+@Composable
+fun FoldToggle(
+    title: String,
+    open: Boolean,
+    active: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    showLabel: Boolean = true
+) {
+    OutlinedButton(onClick = onClick, modifier = modifier) {
+        Text(if (open) "$title ▲" else "$title ▼")
+        if (active) {
+            Spacer(Modifier.width(8.dp))
+            Box(Modifier.size(8.dp).clip(CircleShape).background(Orange))
+            if (showLabel) {
+                Spacer(Modifier.width(4.dp))
+                Text("فیلتر فعال", color = Orange, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+            }
         }
     }
 }
 
-/** The buttons of [ExchangeBar] without a card around them, so they can sit inside another card; [onDelete] adds «حذف». */
+/** The card that opens under a [FoldToggle]: the same spacing for every folded box. */
+@Composable
+fun FoldPanel(content: @Composable ColumnScope.() -> Unit) {
+    AppCard(verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
+}
+
+/**
+ * A box for filters, search and send / receive that stays folded (closed) until the title is tapped.
+ * Use it on every page instead of showing these tools all the time. Pass [active] = true while any filter
+ * inside is on, so the person still sees that the list is filtered.
+ */
+@Composable
+fun FoldBox(
+    title: String,
+    modifier: Modifier = Modifier,
+    active: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(CardGap)) {
+        FoldToggle(title, open, active, onClick = { open = !open }, modifier = Modifier.fillMaxWidth())
+        if (open) FoldPanel(content = content)
+    }
+}
+
+/** The send / receive buttons of a section, without a card around them, so they sit inside a [FoldBox]; [onDelete] adds «حذف». */
 @Composable
 fun ExchangeRow(
     sendEnabled: Boolean,

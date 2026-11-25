@@ -63,8 +63,6 @@ import java.time.LocalDate
 import java.util.UUID
 import kotlin.math.abs
 
-private val RewardGreen = Color(0xFF218838)
-private val PunishRed = Color(0xFFD32F2F)
 private const val ALL_PEOPLE = "همه نفرات"
 private val PERIOD_LABELS = listOf("این ماه", "ماه قبل", "امسال", "همه", "بازه دلخواه")
 
@@ -112,13 +110,18 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(CardGap)
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { showNew = true }, enabled = people.isNotEmpty(), modifier = Modifier.weight(1f)) { Text("+ ثبت سابقه") }
-            OutlinedButton(onClick = { toolsOpen = !toolsOpen }, modifier = Modifier.weight(1f)) {
-                Text(if (toolsOpen) "گزارش‌گیری ▲" else "گزارش‌گیری ▼")
-            }
+            FoldToggle(
+                title = "گزارش‌گیری",
+                open = toolsOpen,
+                active = mode != 0 || personFilter.isNotBlank(),
+                onClick = { toolsOpen = !toolsOpen },
+                modifier = Modifier.weight(1f),
+                showLabel = false
+            )
         }
         if (people.isEmpty()) {
             EmptyMessage("ابتدا در بخش «نیروها» افراد را ثبت کنید، بعد برایشان سابقه ثبت کنید.")
@@ -126,8 +129,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
 
         // ----- گزارش‌گیری: period, search, send / receive and the text report, folded until needed
         if (toolsOpen) {
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
-                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            FoldPanel {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     PERIOD_LABELS.forEachIndexed { index, label ->
                         val selected = mode == index
@@ -176,13 +178,11 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
                         enabled = filtered.isNotEmpty(),
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("ارسال سوابق متنی") }
-                }
             }
         }
 
         // ----- summary
-        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
-            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        AppCard(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     period.label + if (personFilter.isNotBlank()) " • $filterLabel" else "",
                     fontWeight = FontWeight.Bold,
@@ -204,13 +204,11 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
                     color = Color.Gray,
                     style = MaterialTheme.typography.bodySmall
                 )
-            }
         }
 
         // ----- per person
         if (perPerson.isNotEmpty()) {
-            Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
-                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            AppCard(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("به تفکیک نفر", fontWeight = FontWeight.Bold, color = Navy, style = MaterialTheme.typography.titleMedium)
                     perPerson.forEach { (id, name, t) ->
                         Column(Modifier.fillMaxWidth().clickable { personFilter = id }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -230,7 +228,6 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
                             )
                         }
                     }
-                }
             }
         }
 
@@ -315,12 +312,7 @@ private fun ShareBar(reward: Double, punishment: Double, height: Dp, modifier: M
 
 @Composable
 private fun ReportCard(entry: ReportEntry, name: String, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        shape = RoundedCornerShape(14.dp)
-    ) {
-        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    AppCard(onClick = onClick, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(name, Modifier.weight(1f), fontWeight = FontWeight.Bold, color = Navy)
                 Text(JalaliDate.from(entry.date).display(), color = Color.Gray, style = MaterialTheme.typography.bodySmall)
@@ -335,7 +327,6 @@ private fun ReportCard(entry: ReportEntry, name: String, onClick: () -> Unit) {
             if (entry.notes.isNotBlank()) {
                 Text(entry.notes, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
             }
-        }
     }
 }
 

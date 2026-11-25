@@ -57,7 +57,7 @@ private const val MAX_DAYS = 400
 
 /** Index of Sunday in the Saturday-first week used by [ShiftEngine.persianWeekday]. */
 private const val SUNDAY = 1
-private val DayColor = Color(0xFF2E9E57)
+private val DayColor = RewardGreen
 private val NightColor = Color(0xFF4F46C8)
 private val RestColor = Color(0xFFD9D9E6)
 private val RestTextColor = Color(0xFF616161)
@@ -164,7 +164,7 @@ fun CompareScreen(people: List<Person>) {
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(CardGap)
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { picker = 1 }, modifier = Modifier.weight(1f)) {

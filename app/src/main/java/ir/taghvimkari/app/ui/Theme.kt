@@ -11,6 +11,7 @@ import ir.taghvimkari.app.domain.TextSize
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
 
 val Navy = Color(0xFF24245B)
 val Purple = Color(0xFF6558C8)
@@ -18,6 +19,13 @@ val AppBackground = Color(0xFFF6F5FC)
 val Blue = Color(0xFF1976D2)
 val Green = Color(0xFF218838)
 val Orange = Color(0xFFEF8B24)
+
+/** Reward (تشویق) is always this green and punishment (تنبیه) this red, on every screen. */
+val RewardGreen = Color(0xFF218838)
+val PunishRed = Color(0xFFD32F2F)
+
+/** The one gap between cards / boxes on every page. */
+val CardGap = 12.dp
 
 @Composable
 fun TaghvimTheme(textSize: TextSize = TextSize.NORMAL, content: @Composable () -> Unit) {
