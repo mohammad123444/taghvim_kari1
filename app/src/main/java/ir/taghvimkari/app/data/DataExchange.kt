@@ -1,12 +1,12 @@
 package ir.taghvimkari.app.data
 
-import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
 import ir.taghvimkari.app.domain.EvaluationEntry
 import ir.taghvimkari.app.domain.Person
+import ir.taghvimkari.app.domain.SummaryCell
 import ir.taghvimkari.app.domain.ReportEntry
 import org.json.JSONArray
 import org.json.JSONObject
@@ -14,16 +14,20 @@ import java.io.File
 import java.time.LocalDate
 
 /**
- * Sending and receiving data as JSON files. There are three separate kinds of file, one per place in the app:
+ * Sending and receiving data as JSON files. There are separate kinds of file, one per place in the app, and one
+ * «full» file with everything in it (used by the backup):
  *  - "people":      the staff list (ثبت نیروها)        {"app":"taghvim-kari","format":1,"type":"people","people":[...]}
  *  - "evaluations": evaluations (ارزیابی)               {"app":"taghvim-kari","format":1,"type":"evaluations","evaluations":[...]}
  *  - "reports":     reward/punishment reports (سوابق)   {"app":"taghvim-kari","format":1,"type":"reports","reports":[...]}
+ *  - "summary":     the typed cells of the جمع‌بندی table  {"app":"taghvim-kari","format":1,"type":"summary","summary":[...]}
+ *  - "full":        everything (people, reports, evaluations, summary)  — the backup file
  * Files without "type" are the old all-in-one files of earlier versions; they can still be received.
  */
 data class ExchangeData(
     val people: List<Person>,
     val reports: List<ReportEntry>?,
-    val evaluations: List<EvaluationEntry>? = null
+    val evaluations: List<EvaluationEntry>? = null,
+    val summary: List<SummaryCell>? = null
 )
 
 /** What a received file contains. */
@@ -31,6 +35,7 @@ sealed interface Incoming {
     data class People(val people: List<Person>) : Incoming
     data class Evaluations(val list: List<EvaluationEntry>) : Incoming
     data class Reports(val list: List<ReportEntry>) : Incoming
+    data class Summary(val list: List<SummaryCell>) : Incoming
     /** Old all-in-one file. */
     data class Full(val data: ExchangeData) : Incoming
 }
@@ -41,6 +46,8 @@ object DataExchange {
     private const val TYPE_PEOPLE = "people"
     private const val TYPE_EVALUATIONS = "evaluations"
     private const val TYPE_REPORTS = "reports"
+    private const val TYPE_SUMMARY = "summary"
+    private const val TYPE_FULL = "full"
     private const val MAX_BYTES = 5 * 1024 * 1024
     const val MIME = "application/json"
 
@@ -58,6 +65,22 @@ object DataExchange {
 
     fun encodeReports(reports: List<ReportEntry>): String =
         header(TYPE_REPORTS).put("reports", ReportStore.encode(reports)).toString(2)
+
+    fun encodeSummary(summary: List<SummaryCell>): String =
+        header(TYPE_SUMMARY).put("summary", SummaryStore.encode(summary)).toString(2)
+
+    /** Everything in one file: the backup. */
+    fun encodeFull(
+        people: List<Person>,
+        reports: List<ReportEntry>,
+        evaluations: List<EvaluationEntry>,
+        summary: List<SummaryCell>
+    ): String = header(TYPE_FULL)
+        .put("people", LocalStore.encode(people))
+        .put("reports", ReportStore.encode(reports))
+        .put("evaluations", EvaluationStore.encode(evaluations))
+        .put("summary", SummaryStore.encode(summary))
+        .toString(2)
 
     /** Parses a received file. Throws [IllegalArgumentException] with a Persian message if it is not valid. */
     fun parse(text: String): Incoming {
@@ -79,6 +102,22 @@ object DataExchange {
                         val list = obj.optJSONArray("reports")?.let { ReportStore.decode(it) }.orEmpty()
                         require(list.isNotEmpty()) { "در این فایل سابقه‌ای وجود ندارد." }
                         Incoming.Reports(list)
+                    }
+                    TYPE_SUMMARY -> {
+                        val list = obj.optJSONArray("summary")?.let { SummaryStore.decode(it) }.orEmpty()
+                        require(list.isNotEmpty()) { "در این فایل اطلاعات جمع‌بندی وجود ندارد." }
+                        Incoming.Summary(list)
+                    }
+                    TYPE_FULL -> {
+                        val people = obj.optJSONArray("people")?.let { LocalStore.decode(it) }.orEmpty()
+                        val reports = obj.optJSONArray("reports")?.let { ReportStore.decode(it) }
+                        val evaluations = obj.optJSONArray("evaluations")?.let { EvaluationStore.decode(it) }
+                        val summary = obj.optJSONArray("summary")?.let { SummaryStore.decode(it) }
+                        require(
+                            people.isNotEmpty() || !reports.isNullOrEmpty() ||
+                                !evaluations.isNullOrEmpty() || !summary.isNullOrEmpty()
+                        ) { "در این فایل اطلاعاتی وجود ندارد." }
+                        Incoming.Full(ExchangeData(people, reports, evaluations, summary))
                     }
                     else -> {
                         val reports = obj.optJSONArray("reports")?.let { ReportStore.decode(it) }
@@ -134,36 +173,26 @@ object DataExchange {
     fun shareReports(context: Context, reports: List<ReportEntry>): Boolean =
         shareJson(context, "taghvim-reports-${LocalDate.now()}.json", encodeReports(reports), "ارسال سوابق")
 
+    fun shareSummary(context: Context, summary: List<SummaryCell>): Boolean =
+        shareJson(context, "taghvim-summary-${LocalDate.now()}.json", encodeSummary(summary), "ارسال جمع‌بندی")
+
     /**
-     * Monthly backup: the same three separate files as the three send buttons (staff, evaluations, reports),
-     * handed to the share sheet together so one tap sends them all. Empty kinds are left out.
+     * Backup: ONE file with everything (staff, reports, evaluations and the typed جمع‌بندی cells), so a single
+     * file is enough to restore the whole app. Returns false if there is nothing to send or sharing failed.
      */
     fun shareBackup(
         context: Context,
         people: List<Person>,
         evaluations: List<EvaluationEntry>,
-        reports: List<ReportEntry>
-    ): Boolean = runCatching {
-        val today = LocalDate.now()
-        val files = buildList {
-            if (people.isNotEmpty()) add("taghvim-people-$today.json" to encodePeople(people))
-            if (evaluations.isNotEmpty()) add("taghvim-evaluations-$today.json" to encodeEvaluations(evaluations))
-            if (reports.isNotEmpty()) add("taghvim-reports-$today.json" to encodeReports(reports))
-        }
-        require(files.isNotEmpty())
-        val dir = File(context.cacheDir, "shared").apply { mkdirs() }
-        dir.listFiles()?.forEach { it.delete() }
-        val uris = ArrayList<Uri>()
-        files.forEach { (name, json) ->
-            val file = File(dir, name)
-            file.writeText(json, Charsets.UTF_8)
-            uris.add(FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file))
-        }
-        val send = Intent(Intent.ACTION_SEND_MULTIPLE)
-            .setType(MIME)
-            .putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        send.clipData = ClipData.newRawUri(null, uris.first()).also { clip -> uris.drop(1).forEach { clip.addItem(ClipData.Item(it)) } }
-        context.startActivity(Intent.createChooser(send, "پشتیبان‌گیری").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    }.isSuccess
+        reports: List<ReportEntry>,
+        summary: List<SummaryCell>
+    ): Boolean {
+        if (people.isEmpty() && evaluations.isEmpty() && reports.isEmpty() && summary.isEmpty()) return false
+        return shareJson(
+            context,
+            "taghvim-backup-${LocalDate.now()}.json",
+            encodeFull(people, reports, evaluations, summary),
+            "پشتیبان‌گیری"
+        )
+    }
 }

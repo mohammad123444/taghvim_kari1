@@ -176,18 +176,28 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
     viewModel.pendingImport?.let { incoming ->
         AlertDialog(
             onDismissRequest = viewModel::cancelImport,
-            title = { Text("دریافت اطلاعات نیروها", fontWeight = FontWeight.Bold) },
+            title = { Text("دریافت اطلاعات", fontWeight = FontWeight.Bold) },
             text = {
+                val others = buildList {
+                    incoming.reports?.let { add("${it.size.toPersian()} سابقه") }
+                    incoming.evaluations?.let { add("${it.size.toPersian()} ارزیابی") }
+                    incoming.summary?.let { add("${it.size.toPersian()} مورد جمع‌بندی") }
+                }
+                val hasPeople = incoming.people.isNotEmpty()
                 ScrollText(
-                    "در فایل دریافتی ${incoming.people.size.toPersian()} نفر هست. فهرست نیروهای فعلی این گوشی " +
-                        "(${viewModel.people.size.toPersian()} نفر) کاملاً با آن جایگزین می‌شود." +
-                        (if (incoming.reports != null || incoming.evaluations != null) {
-                            " سوابق و ارزیابی‌های موجود در فایل به اطلاعات فعلی اضافه می‌شود و چیزی از آن‌ها حذف نمی‌شود."
+                    "در فایل دریافتی " + (listOfNotNull(
+                        if (hasPeople) "${incoming.people.size.toPersian()} نفر" else null
+                    ) + others).joinToString("، ") + " هست. " +
+                        (if (hasPeople) {
+                            "فهرست نیروهای فعلی این گوشی (${viewModel.people.size.toPersian()} نفر) کاملاً با آن جایگزین می‌شود. "
                         } else "") +
-                        " ادامه می‌دهید؟"
+                        (if (others.isNotEmpty()) {
+                            "بقیهٔ موارد به اطلاعات فعلی اضافه می‌شود و چیزی از آن‌ها حذف نمی‌شود. "
+                        } else "") +
+                        "ادامه می‌دهید؟"
                 )
             },
-            confirmButton = { TextButton(onClick = viewModel::confirmImport) { Text("جایگزین کن", fontWeight = FontWeight.Bold) } },
+            confirmButton = { TextButton(onClick = viewModel::confirmImport) { Text(if (incoming.people.isNotEmpty()) "جایگزین کن" else "اضافه کن", fontWeight = FontWeight.Bold) } },
             dismissButton = { TextButton(onClick = viewModel::cancelImport) { Text("انصراف") } }
         )
     }
@@ -225,6 +235,24 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
             },
             confirmButton = { TextButton(onClick = viewModel::confirmEvaluationImport) { Text("اضافه کن", fontWeight = FontWeight.Bold) } },
             dismissButton = { TextButton(onClick = viewModel::cancelEvaluationImport) { Text("انصراف") } }
+        )
+    }
+
+    viewModel.pendingSummary?.let { incoming ->
+        val merge = viewModel.previewSummaryMerge(incoming)
+        AlertDialog(
+            onDismissRequest = viewModel::cancelSummaryImport,
+            title = { Text("دریافت جمع‌بندی", fontWeight = FontWeight.Bold) },
+            text = {
+                ScrollText(
+                    "در فایل دریافتی ${incoming.size.toPersian()} مورد هست: " +
+                        "${merge.added.toPersian()} مورد جدید، ${merge.updated.toPersian()} مورد به‌روزشده و " +
+                        "${merge.unchanged.toPersian()} مورد بدون تغییر. " +
+                        "اطلاعات فعلی این گوشی حذف نمی‌شود و فقط این موارد به آن اضافه می‌شود. ادامه می‌دهید؟"
+                )
+            },
+            confirmButton = { TextButton(onClick = viewModel::confirmSummaryImport) { Text("اضافه کن", fontWeight = FontWeight.Bold) } },
+            dismissButton = { TextButton(onClick = viewModel::cancelSummaryImport) { Text("انصراف") } }
         )
     }
 

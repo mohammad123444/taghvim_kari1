@@ -11,7 +11,32 @@ class SummaryStore(context: Context) {
 
     fun load(): List<SummaryCell> {
         val array = runCatching { JSONArray(prefs.getString(KEY, "[]")) }.getOrElse { JSONArray() }
-        return (0 until array.length()).mapNotNull { i ->
+        return decode(array)
+    }
+
+    fun save(cells: List<SummaryCell>) {
+        prefs.edit().putString(KEY, encode(cells).toString()).apply()
+    }
+
+    companion object {
+        private const val PREFS_NAME = "taghvim_kari_summary"
+        private const val KEY = "cells"
+
+        fun encode(cells: List<SummaryCell>): JSONArray = JSONArray().also { array ->
+            cells.forEach { c ->
+                array.put(
+                    JSONObject().apply {
+                        put("personId", c.personId)
+                        put("periodKey", c.periodKey)
+                        c.extra?.let { put("extra", it) }
+                        put("comment", c.comment)
+                        c.level?.let { put("level", it) }
+                    }
+                )
+            }
+        }
+
+        fun decode(array: JSONArray): List<SummaryCell> = (0 until array.length()).mapNotNull { i ->
             runCatching {
                 val o = array.getJSONObject(i)
                 SummaryCell(
@@ -23,26 +48,5 @@ class SummaryStore(context: Context) {
                 )
             }.getOrNull()
         }
-    }
-
-    fun save(cells: List<SummaryCell>) {
-        val array = JSONArray()
-        cells.forEach { c ->
-            array.put(
-                JSONObject().apply {
-                    put("personId", c.personId)
-                    put("periodKey", c.periodKey)
-                    c.extra?.let { put("extra", it) }
-                    put("comment", c.comment)
-                    c.level?.let { put("level", it) }
-                }
-            )
-        }
-        prefs.edit().putString(KEY, array.toString()).apply()
-    }
-
-    private companion object {
-        const val PREFS_NAME = "taghvim_kari_summary"
-        const val KEY = "cells"
     }
 }

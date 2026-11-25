@@ -93,7 +93,8 @@ fun SettingsScreen(viewModel: PeopleViewModel) {
             )
             Button(
                 onClick = { backupFailed = !viewModel.sendBackup(context) },
-                enabled = people.isNotEmpty() || viewModel.reports.isNotEmpty() || viewModel.evaluations.isNotEmpty(),
+                enabled = people.isNotEmpty() || viewModel.reports.isNotEmpty() || viewModel.evaluations.isNotEmpty() ||
+                    viewModel.summaryCells.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth()
             ) { Text("ارسال") }
             if (backupFailed) {

@@ -80,4 +80,6 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")
+    // Real org.json for plain JVM tests (the Android one is only a stub there): used by the backup file test.
+    testImplementation("org.json:json:20240303")
 }

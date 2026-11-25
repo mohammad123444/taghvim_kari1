@@ -38,3 +38,27 @@ fun parseNumber(text: String): Double? {
     if (clean.isBlank()) return null
     return clean.toDoubleOrNull()
 }
+
+data class SummaryMerge(val result: List<SummaryCell>, val added: Int, val updated: Int, val unchanged: Int)
+
+/** Adds received جمع‌بندی cells to [current] without deleting anything; the same person and period is overwritten. */
+fun mergeSummary(current: List<SummaryCell>, incoming: List<SummaryCell>): SummaryMerge {
+    val out = current.toMutableList()
+    var added = 0
+    var updated = 0
+    var unchanged = 0
+    for (c in incoming) {
+        if (c.isEmpty) continue
+        val index = out.indexOfFirst { it.personId == c.personId && it.periodKey == c.periodKey }
+        if (index < 0) {
+            out.add(c)
+            added++
+        } else if (out[index] == c) {
+            unchanged++
+        } else {
+            out[index] = c
+            updated++
+        }
+    }
+    return SummaryMerge(out, added, updated, unchanged)
+}

@@ -16,6 +16,8 @@ import ir.taghvimkari.app.data.Incoming
 import ir.taghvimkari.app.data.EvaluationStore
 import ir.taghvimkari.app.data.SummaryStore
 import ir.taghvimkari.app.domain.SummaryCell
+import ir.taghvimkari.app.domain.SummaryMerge
+import ir.taghvimkari.app.domain.mergeSummary
 import ir.taghvimkari.app.data.ReportStore
 import ir.taghvimkari.app.data.LocalStore
 import ir.taghvimkari.app.data.UpdateChecker
@@ -105,6 +107,10 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
     var pendingReports: List<ReportEntry>? by mutableStateOf(null)
         private set
 
+    /** جمع‌بندی cells received from someone else, waiting for the user to confirm the merge. */
+    var pendingSummary: List<SummaryCell>? by mutableStateOf(null)
+        private set
+
     var importError: String? by mutableStateOf(null)
         private set
 
@@ -191,9 +197,9 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
         backupPrefs.snoozedUntilDay = until
     }
 
-    /** Sends staff, evaluations and reports (three files, one share). Returns false if nothing could be sent. */
+    /** Sends the backup: ONE file with staff, evaluations, reports and the جمع‌بندی cells. Returns false if nothing could be sent. */
     fun sendBackup(context: Context): Boolean {
-        val ok = DataExchange.shareBackup(context, people, evaluations, reports)
+        val ok = DataExchange.shareBackup(context, people, evaluations, reports, summaryCells)
         if (ok) {
             val today = LocalDate.now().toEpochDay()
             lastBackupDay = today
@@ -224,6 +230,7 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
                         is Incoming.Full -> pendingImport = incoming.data
                         is Incoming.Evaluations -> pendingEvaluations = incoming.list
                         is Incoming.Reports -> pendingReports = incoming.list
+                        is Incoming.Summary -> pendingSummary = incoming.list
                     }
                 }
                 .onFailure { importError = it.message ?: "فایل معتبر نیست." }
@@ -236,8 +243,11 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun confirmImport() {
         pendingImport?.let { data ->
-            people = data.people
-            commit()
+            // A backup of an app with no staff must not wipe the staff list of this phone.
+            if (data.people.isNotEmpty()) {
+                people = data.people
+                commit()
+            }
             data.reports?.let {
                 reports = mergeReports(reports, it, people).result
                 reportStore.save(reports)
@@ -245,6 +255,10 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
             data.evaluations?.let {
                 evaluations = mergeEvaluations(evaluations, it, people).result
                 evaluationStore.save(evaluations)
+            }
+            data.summary?.let {
+                summaryCells = mergeSummary(summaryCells, it).result
+                summaryStore.save(summaryCells)
             }
         }
         pendingImport = null
@@ -302,6 +316,21 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
             evaluations = evaluations + removed.filter { r -> evaluations.none { it.id == r.id } }
             evaluationStore.save(evaluations)
         }
+    }
+
+    /** What merging the received جمع‌بندی cells would do (shown before the user confirms). */
+    fun previewSummaryMerge(incoming: List<SummaryCell>): SummaryMerge = mergeSummary(summaryCells, incoming)
+
+    fun confirmSummaryImport() {
+        pendingSummary?.let { incoming ->
+            summaryCells = mergeSummary(summaryCells, incoming).result
+            summaryStore.save(summaryCells)
+        }
+        pendingSummary = null
+    }
+
+    fun cancelSummaryImport() {
+        pendingSummary = null
     }
 
     fun cancelImport() {

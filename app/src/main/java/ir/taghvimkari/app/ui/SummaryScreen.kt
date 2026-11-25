@@ -1,5 +1,7 @@
 package ir.taghvimkari.app.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -40,6 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ir.taghvimkari.app.data.DataExchange
 import ir.taghvimkari.app.domain.Employment
 import ir.taghvimkari.app.domain.Evaluations
 import ir.taghvimkari.app.domain.JalaliDate
@@ -99,6 +102,10 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
     var picker by rememberSaveable { mutableStateOf(0) } // 0 closed, 1 from, 2 to
     var editPerson by rememberSaveable { mutableStateOf("") }
     var editColumn by rememberSaveable { mutableStateOf(0) } // 3 = ملاحظات (number with comment), 4 = رئیس
+    var sendFailed by rememberSaveable { mutableStateOf(false) }
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.offerImport(uri)
+    }
     var foldedGroups by rememberSaveable { mutableStateOf("") } // employment kinds that are folded
 
     val from = LocalDate.ofEpochDay(fromEpoch)
@@ -243,10 +250,16 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
                 color = Color.Gray,
                 style = MaterialTheme.typography.bodySmall
             )
-            Button(
+            ExchangeRow(
+                sendEnabled = viewModel.summaryCells.isNotEmpty(),
+                sendFailed = sendFailed,
+                onSend = { sendFailed = !DataExchange.shareSummary(context, viewModel.summaryCells) },
+                onReceive = { filePicker.launch(arrayOf("*/*")) }
+            )
+            OutlinedButton(
                 onClick = { shareText(context, buildSummaryText(from, to, rows)) },
                 modifier = Modifier.fillMaxWidth()
-            ) { Text("ارسال") }
+            ) { Text("ارسال جدول به صورت متن") }
         }
     }
 
