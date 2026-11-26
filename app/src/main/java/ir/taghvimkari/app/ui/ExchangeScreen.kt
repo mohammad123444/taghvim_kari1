@@ -6,25 +6,36 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -32,32 +43,29 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import ir.taghvimkari.app.data.DataExchange
 import ir.taghvimkari.app.domain.EvaluationEntry
 import ir.taghvimkari.app.domain.JalaliDate
-import ir.taghvimkari.app.domain.MIN_SEARCH_CHARS
 import ir.taghvimkari.app.domain.Person
 import ir.taghvimkari.app.domain.ReportEntry
-import ir.taghvimkari.app.domain.compareNames
+import ir.taghvimkari.app.domain.displayOrder
 import ir.taghvimkari.app.domain.evaluationPeriods
 import ir.taghvimkari.app.domain.formatHours
-import ir.taghvimkari.app.domain.nameMatches
-import ir.taghvimkari.app.domain.periodKeyOf
-import ir.taghvimkari.app.domain.periodText
-import ir.taghvimkari.app.domain.searchTooShort
-import ir.taghvimkari.app.domain.shiftRank
 import ir.taghvimkari.app.domain.sortedByShiftName
 import ir.taghvimkari.app.domain.toPersian
 import ir.taghvimkari.app.domain.totals
 import java.time.LocalDate
 import kotlin.math.abs
 
-private const val ALL_LABEL = "همه"
-
 /**
  * «گزارش» tab: the one place where staff, reward / punishment records and evaluations are sent and received.
- * Each section has the same filters it had on its own page (name search / period / person / evaluator), and
- * says exactly what is going to be sent (how many items, which period, which person) before the button is pressed.
+ *
+ *  - نفرات: everything is sent; the receiver's staff list is wiped and replaced completely by the file.
+ *  - سوابق: all records, or the records of chosen people, or the records of a period; the receiver adds them to
+ *    his own (nothing is replaced) and is warned about duplicates, which are never registered.
+ *  - ارزیابی: all evaluations, or those of a period; same merge rule as records.
+ * A duplicate is: same reporter + same person + same date (evaluations: same evaluator + person + period).
  */
 @Composable
 fun ExchangeScreen(viewModel: PeopleViewModel) {
@@ -92,49 +100,30 @@ fun ExchangeScreen(viewModel: PeopleViewModel) {
 
 @Composable
 private fun PeopleExchange(people: List<Person>, context: android.content.Context, onReceive: () -> Unit) {
-    var query by rememberSaveable { mutableStateOf("") }
     var sendFailed by rememberSaveable { mutableStateOf(false) }
-    val searching = query.isNotBlank()
-    val selected = if (searching) people.filter { nameMatches(it.name, query) } else people
 
-    AppCard(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionTitle("چه چیزی ارسال شود؟")
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            modifier = Modifier.fillMaxWidth().keepVisibleWhenFocused(),
-            label = { Text("جستجوی نام (خالی = همهٔ نفرات؛ حداقل ${MIN_SEARCH_CHARS.toPersian()} حرف)") },
-            singleLine = true
-        )
-    }
-    AppCard(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        SectionTitle("آنچه ارسال می‌شود")
-        Text(
-            if (searching) "نفرات منطبق با «${query.trim()}»" else "همهٔ نفرات ثبت‌شده",
-            fontWeight = FontWeight.Bold
-        )
-        Text("${selected.size.toPersian()} نفر از ${people.size.toPersian()} نفر", color = Purple, fontWeight = FontWeight.Bold)
-        if (searchTooShort(query)) {
-            Text("برای جستجو حداقل ${MIN_SEARCH_CHARS.toPersian()} حرف بنویسید.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-        } else if (selected.isEmpty() && searching) {
-            Text("نیرویی پیدا نشد.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-        }
-        if (selected.isNotEmpty()) {
+    ExStep(1, "چه چیزی ارسال می‌شود؟") {
+        Text("همهٔ نفرات ثبت‌شده", fontWeight = FontWeight.Bold)
+        BigCount(people.size, "نفر")
+        if (people.isEmpty()) {
+            Note("هنوز نیرویی ثبت نشده است.")
+        } else {
             FoldBox("نمایش نام‌ها") {
-                selected.sortedByShiftName().forEach { StyledName("• ${it.name}", it.isMember) }
+                people.sortedByShiftName().forEach { StyledName("• ${it.name}", it.isMember) }
             }
         }
     }
-    AppCard(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        ExchangeRow(
-            sendEnabled = selected.isNotEmpty(),
+    ExStep(2, "ارسال و دریافت") {
+        SendReceiveButtons(
+            sendLabel = "ارسال ${people.size.toPersian()} نفر",
+            sendEnabled = people.isNotEmpty(),
             sendFailed = sendFailed,
-            onSend = { sendFailed = !DataExchange.sharePeople(context, selected) },
+            onSend = { sendFailed = !DataExchange.sharePeople(context, people) },
             onReceive = onReceive
         )
         Note(
-            "فایل دریافتی، فهرست نیروهای فعلی را کاملاً جایگزین می‌کند (ادغام نمی‌شود) و نام‌های تکراری حذف می‌شوند." +
-                if (searching) " چون فقط بخشی از نفرات ارسال می‌شود، دستگاه گیرنده فقط همین نفرات را خواهد داشت." else ""
+            "دریافت‌کننده: با وارد کردن این فایل، فهرست نیروهای فعلی او کاملاً پاک و با این فایل جایگزین می‌شود و هیچ اطلاعاتی از فهرست قبلی نمی‌ماند.",
+            warning = true
         )
     }
 }
@@ -148,108 +137,117 @@ private fun ReportsExchange(
     context: android.content.Context,
     onReceive: () -> Unit
 ) {
-    val today = remember { LocalDate.now() }
-    val todayJalali = remember { JalaliDate.from(today) }
-    var mode by rememberSaveable { mutableStateOf(3) } // 0 this month, 1 last month, 2 this year, 3 all, 4 custom
+    val todayJalali = remember { JalaliDate.from(LocalDate.now()) }
+    var mode by rememberSaveable { mutableStateOf(0) } // 0 all, 1 chosen people, 2 a period
+    var picked by rememberSaveable { mutableStateOf("") } // ids of the chosen people, joined by ","
+    var addKey by rememberSaveable { mutableStateOf(0) }
+    var periodMode by rememberSaveable { mutableStateOf(0) } // 0 this month, 1 last month, 2 this year, 4 custom
     var customFrom by rememberSaveable { mutableStateOf(NO_DATE) }
     var customTo by rememberSaveable { mutableStateOf(NO_DATE) }
-    var picker by rememberSaveable { mutableStateOf(0) } // 0 closed, 1 from, 2 to
-    var personFilter by rememberSaveable { mutableStateOf("") }
     var sendFailed by rememberSaveable { mutableStateOf(false) }
 
     val labelled = remember(people) { uniqueLabels(people).map { (p, n) -> p to if (p.active) n else "$n (غیرفعال)" } }
     val nameById = remember(people) { people.associate { it.id to it.name } }
-    val rankById = remember(people) { people.associate { it.id to it.shiftRank } }
     val memberIds = remember(people) { people.filter { it.isMember }.map { it.id }.toSet() }
-    val nameOf: (ReportEntry) -> String = { e -> nameById[e.personId] ?: e.personName }
+    val order = remember(people) { people.displayOrder() }
+    val pickedIds = picked.split(",").filter { it.isNotBlank() }
+    val period = periodFor(periodMode, todayJalali, customFrom, customTo)
+    val customMissing = periodMode == 4 && customFrom == NO_DATE && customTo == NO_DATE
 
-    val period = remember(mode, customFrom, customTo) { periodFor(mode, todayJalali, customFrom, customTo) }
-    val filtered = reports
-        .filter { period.contains(it.date) && (personFilter.isBlank() || it.personId == personFilter) }
-        .sortedWith(compareBy<ReportEntry> { rankById[it.personId] ?: 9 }.thenByDescending { it.date }.thenBy { nameOf(it) })
-    val totals = filtered.totals()
-    val personLabel = labelled.firstOrNull { it.first.id == personFilter }?.second ?: ALL_PEOPLE
-    val perPerson = filtered.groupBy { it.personId }
-        .map { (id, list) -> Triple(id, nameOf(list.first()), list.size) }
-        .sortedWith(compareBy<Triple<String, String, Int>> { rankById[it.first] ?: 9 }.thenComparator { a, b -> compareNames(a.second, b.second) })
+    val selected = when (mode) {
+        0 -> reports
+        1 -> reports.filter { it.personId in pickedIds }
+        else -> if (customMissing) emptyList() else reports.filter { period.contains(it.date) }
+    }.sortedWith(compareBy<ReportEntry> { order[it.personId] ?: Int.MAX_VALUE }.thenByDescending { it.date })
+    val ready = when (mode) {
+        1 -> pickedIds.isNotEmpty()
+        2 -> !customMissing
+        else -> true
+    }
+    val totals = selected.totals()
+    val perPerson = selected.groupBy { it.personId }
+        .map { (id, list) -> Triple(id, nameById[id] ?: list.first().personName, list.size) }
+        .sortedBy { order[it.first] ?: Int.MAX_VALUE }
 
-    AppCard(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionTitle("چه چیزی ارسال شود؟")
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            PERIOD_LABELS.forEachIndexed { index, label ->
-                val on = mode == index
-                Surface(
-                    color = if (on) Purple else Purple.copy(alpha = .12f),
-                    shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier.clip(RoundedCornerShape(20.dp)).clickable { mode = index }
+    ExStep(1, "کدام سوابق ارسال شود؟") {
+        ModeOption(mode == 0, "همهٔ سوابق", "تمام سوابق ثبت‌شده") { mode = 0 }
+        ModeOption(mode == 1, "سوابق یک یا چند نفر", "نفرات را خودتان انتخاب می‌کنید") { mode = 1 }
+        ModeOption(mode == 2, "سوابق یک بازهٔ زمانی", "فقط سوابقی که تاریخ‌شان در بازه است") { mode = 2 }
+
+        if (mode == 1) {
+            pickedIds.forEach { id ->
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Purple.copy(alpha = .08f)).padding(start = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        label,
-                        Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
-                        color = if (on) Color.White else Purple,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.labelLarge
-                    )
+                    StyledName(nameById[id] ?: "نامشخص", id in memberIds, Modifier.weight(1f))
+                    IconButton(onClick = { picked = pickedIds.filterNot { it == id }.joinToString(",") }) {
+                        Icon(Icons.Default.Clear, contentDescription = "حذف از انتخاب")
+                    }
                 }
             }
-        }
-        if (mode == 4) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { picker = 1 }, modifier = Modifier.weight(1f)) { Text(dateBoxText("از", customFrom)) }
-                OutlinedButton(onClick = { picker = 2 }, modifier = Modifier.weight(1f)) { Text(dateBoxText("تا", customTo)) }
+            key(addKey) {
+                PersonSearchField(
+                    label = if (pickedIds.isEmpty()) "افزودن نفر" else "افزودن نفر دیگر",
+                    options = labelled.filter { it.first.id !in pickedIds },
+                    selectedId = "",
+                    onSelect = { id ->
+                        if (id.isNotBlank()) {
+                            picked = (pickedIds + id).joinToString(",")
+                            addKey++
+                        }
+                    }
+                )
             }
         }
-        PersonSearchField(
-            label = "نفر (خالی = همه نفرات)",
-            options = labelled,
-            selectedId = personFilter,
-            onSelect = { personFilter = it }
+        if (mode == 2) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("این ماه" to 0, "ماه قبل" to 1, "امسال" to 2, "بازهٔ دلخواه" to 4).forEach { (label, m) ->
+                    ModeChip(label, periodMode == m) { periodMode = m }
+                }
+            }
+            if (periodMode == 4) {
+                DateRangeBoxes(customFrom, customTo) { f, t -> customFrom = f; customTo = t }
+            }
+        }
+    }
+
+    ExStep(2, "خلاصهٔ آنچه ارسال می‌شود") {
+        Text(
+            when (mode) {
+                0 -> "همهٔ سوابق ثبت‌شده"
+                1 -> if (pickedIds.isEmpty()) "هنوز نفری انتخاب نشده است" else "سوابق ${pickedIds.size.toPersian()} نفر انتخاب‌شده"
+                else -> if (customMissing) "تاریخ شروع یا پایان بازه را انتخاب کنید" else "سوابق بازهٔ ${period.label}"
+            },
+            fontWeight = FontWeight.Bold
         )
-    }
-    AppCard(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        SectionTitle("آنچه ارسال می‌شود")
-        Text("بازه: ${period.label}", fontWeight = FontWeight.Bold)
-        Text("نفر: $personLabel", fontWeight = FontWeight.Bold)
-        Text("${totals.count.toPersian()} سابقه از ${reports.size.toPersian()} سابقهٔ ثبت‌شده", color = Purple, fontWeight = FontWeight.Bold)
-        if (totals.count > 0) {
-            Text(
+        BigCount(selected.size, "سابقه", "از ${reports.size.toPersian()} سابقهٔ ثبت‌شده")
+        if (selected.isNotEmpty()) {
+            Note(
                 "تشویق ${formatHours(totals.reward)} ساعت • تنبیه ${formatHours(totals.punishment)} ساعت • " +
-                    "خالص ${if (totals.net < 0) "−" else ""}${formatHours(abs(totals.net))} ساعت",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray
+                    "خالص ${if (totals.net < 0) "−" else ""}${formatHours(abs(totals.net))} ساعت"
             )
-            FoldBox("به تفکیک نفر") {
-                perPerson.forEach { (id, name, count) -> StyledName("• $name: ${count.toPersian()} سابقه", id in memberIds) }
+            if (perPerson.size > 1) {
+                FoldBox("به تفکیک نفر") {
+                    perPerson.forEach { (id, name, count) -> StyledName("• $name: ${count.toPersian()} سابقه", id in memberIds) }
+                }
             }
-        } else {
-            Text("با این انتخاب سابقه‌ای پیدا نشد.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+        } else if (ready) {
+            Note("با این انتخاب سابقه‌ای پیدا نشد.")
         }
     }
-    AppCard(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        ExchangeRow(
-            sendEnabled = filtered.isNotEmpty(),
+
+    ExStep(3, "ارسال و دریافت") {
+        SendReceiveButtons(
+            sendLabel = "ارسال ${selected.size.toPersian()} سابقه",
+            sendEnabled = ready && selected.isNotEmpty(),
             sendFailed = sendFailed,
-            onSend = { sendFailed = !DataExchange.shareReports(context, filtered) },
+            onSend = { sendFailed = !DataExchange.shareReports(context, selected) },
             onReceive = onReceive
         )
-        Note("سوابق دریافتی به سوابق فعلی اضافه می‌شود و چیزی حذف نمی‌شود.")
-    }
-
-    if (picker != 0) {
-        JalaliDatePickerDialog(
-            initial = LocalDate.ofEpochDay((if (picker == 1) customFrom else customTo).let { if (it == NO_DATE) today.toEpochDay() else it }),
-            title = if (picker == 1) "تاریخ شروع بازه" else "تاریخ پایان بازه",
-            onDismiss = { picker = 0 },
-            onPick = { d ->
-                if (picker == 1) {
-                    customFrom = d.toEpochDay()
-                    if (customTo != NO_DATE && customTo < customFrom) customTo = customFrom
-                } else {
-                    customTo = d.toEpochDay()
-                    if (customFrom != NO_DATE && customFrom > customTo) customFrom = customTo
-                }
-                picker = 0
-            }
+        Note(
+            "دریافت‌کننده: این سوابق به سوابق خودش اضافه می‌شود و چیزی از اطلاعاتش حذف یا عوض نمی‌شود. " +
+                "سابقه‌ای که ثبت‌کننده، نفر و تاریخ آن با یکی از سوابق او یکی باشد، تکراری است؛ ثبت نمی‌شود و به او هشدار داده می‌شود."
         )
     }
 }
@@ -280,94 +278,194 @@ private fun EvaluationFileExchange(
     context: android.content.Context,
     onReceive: () -> Unit
 ) {
-    var personFilter by rememberSaveable { mutableStateOf("") }
-    var evaluatorFilter by rememberSaveable { mutableStateOf("") }
-    var periodFilter by rememberSaveable { mutableStateOf("") } // key of the evaluation period, blank = all
+    var mode by rememberSaveable { mutableStateOf(0) } // 0 all, 1 a period
+    var customFrom by rememberSaveable { mutableStateOf(NO_DATE) }
+    var customTo by rememberSaveable { mutableStateOf(NO_DATE) }
     var sendFailed by rememberSaveable { mutableStateOf(false) }
 
-    val labelled = remember(people) { uniqueLabels(people).map { (p, n) -> p to if (p.active) n else "$n (غیرفعال)" } }
     val nameById = remember(people) { people.associate { it.id to it.name } }
-    val rankById = remember(people) { people.associate { it.id to it.shiftRank } }
     val memberIds = remember(people) { people.filter { it.isMember }.map { it.id }.toSet() }
-    val nameOf: (EvaluationEntry) -> String = { e -> nameById[e.personId] ?: e.personName }
-    val evaluatorList = remember(evaluations, people) {
-        evaluations.map { it.evaluatorId }.filter { it.isNotBlank() }.distinct()
-            .map { id -> id to (nameById[id] ?: evaluations.firstOrNull { it.evaluatorId == id }?.evaluatorName.orEmpty()) }
-            .sortedWith(compareBy<Pair<String, String>> { rankById[it.first] ?: 9 }.thenComparator { a, b -> compareNames(a.second, b.second) })
-    }
-    val evaluatorLabels = remember(evaluatorList) { numberedLabels(evaluatorList.map { it.second }) }
+    val order = remember(people) { people.displayOrder() }
     val periods = remember(evaluations) { evaluationPeriods(evaluations) }
     val periodLabels = remember(periods, evaluations, nameById) { periodLabelsWithEvaluators(periods, evaluations, nameById) }
-    val periodIndex = periods.indexOfFirst { periodKeyOf(it.first, it.second) == periodFilter }
+    val customMissing = customFrom == NO_DATE && customTo == NO_DATE
 
-    val filtered = evaluations
-        .filter {
-            (personFilter.isBlank() || it.personId == personFilter) &&
-                (evaluatorFilter.isBlank() || it.evaluatorId == evaluatorFilter) &&
-                (periodFilter.isBlank() || it.periodKey == periodFilter)
+    val selected = when (mode) {
+        0 -> evaluations
+        else -> if (customMissing) emptyList() else evaluations.filter { e ->
+            // an evaluation belongs to the range when its evaluation period overlaps the range
+            (customFrom == NO_DATE || e.dateTo.toEpochDay() >= customFrom) &&
+                (customTo == NO_DATE || e.date.toEpochDay() <= customTo)
         }
-        .sortedWith(compareBy<EvaluationEntry> { rankById[it.personId] ?: 9 }.thenByDescending { it.date }.thenBy { nameOf(it) })
-    val periodShown = periodLabels.getOrNull(periodIndex) ?: ALL_LABEL
-    val personShown = labelled.firstOrNull { it.first.id == personFilter }?.second ?: ALL_PEOPLE
-    val evaluatorShown = evaluatorList.indexOfFirst { it.first == evaluatorFilter }.takeIf { it >= 0 }?.let { evaluatorLabels[it] } ?: ALL_LABEL
-    val incomplete = filtered.count { !it.isComplete }
-    val perPerson = filtered.groupBy { it.personId }
-        .map { (id, list) -> Triple(id, nameOf(list.first()), list.size) }
-        .sortedWith(compareBy<Triple<String, String, Int>> { rankById[it.first] ?: 9 }.thenComparator { a, b -> compareNames(a.second, b.second) })
+    }.sortedWith(compareBy<EvaluationEntry> { order[it.personId] ?: Int.MAX_VALUE }.thenByDescending { it.date })
+    val ready = mode == 0 || !customMissing
+    val incomplete = selected.count { !it.isComplete }
+    val perPerson = selected.groupBy { it.personId }
+        .map { (id, list) -> Triple(id, nameById[id] ?: list.first().personName, list.size) }
+        .sortedBy { order[it.first] ?: Int.MAX_VALUE }
+    val rangeText = when {
+        customFrom != NO_DATE && customTo != NO_DATE -> "از ${dateText(customFrom)} تا ${dateText(customTo)}"
+        customFrom != NO_DATE -> "از ${dateText(customFrom)}"
+        else -> "تا ${dateText(customTo)}"
+    }
 
-    AppCard(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionTitle("چه چیزی ارسال شود؟")
-        if (periods.isNotEmpty()) {
-            FilterDropdown("دورهٔ ارزیابی", listOf(ALL_LABEL) + periodLabels, periodShown) { label ->
-                val i = periodLabels.indexOf(label)
-                periodFilter = if (i >= 0) periodKeyOf(periods[i].first, periods[i].second) else ""
+    ExStep(1, "کدام ارزیابی‌ها ارسال شود؟") {
+        ModeOption(mode == 0, "همهٔ ارزیابی‌ها", "تمام ارزیابی‌های ثبت‌شده") { mode = 0 }
+        ModeOption(mode == 1, "ارزیابی‌های یک بازهٔ زمانی", "ارزیابی‌هایی که دورهٔ آن‌ها با بازه همپوشانی دارد") { mode = 1 }
+        if (mode == 1) {
+            if (periods.isNotEmpty()) {
+                val current = periods.indexOfFirst { it.first.toEpochDay() == customFrom && it.second.toEpochDay() == customTo }
+                FilterDropdown("انتخاب از دوره‌های ثبت‌شده", periodLabels, periodLabels.getOrNull(current) ?: "—") { label ->
+                    val i = periodLabels.indexOf(label)
+                    if (i >= 0) {
+                        customFrom = periods[i].first.toEpochDay()
+                        customTo = periods[i].second.toEpochDay()
+                    }
+                }
             }
+            DateRangeBoxes(customFrom, customTo) { f, t -> customFrom = f; customTo = t }
         }
-        PersonSearchField(
-            label = "نفر (خالی = همه نفرات)",
-            options = labelled,
-            selectedId = personFilter,
-            onSelect = { personFilter = it }
+    }
+
+    ExStep(2, "خلاصهٔ آنچه ارسال می‌شود") {
+        Text(
+            when (mode) {
+                0 -> "همهٔ ارزیابی‌های ثبت‌شده"
+                else -> if (customMissing) "تاریخ شروع یا پایان بازه را انتخاب کنید" else "ارزیابی‌های بازهٔ $rangeText"
+            },
+            fontWeight = FontWeight.Bold
         )
-        if (evaluatorList.isNotEmpty()) {
-            FilterDropdown("ارزیاب", listOf(ALL_LABEL) + evaluatorLabels, evaluatorShown) { label ->
-                evaluatorFilter = evaluatorList.getOrNull(evaluatorLabels.indexOf(label))?.first ?: ""
+        BigCount(selected.size, "ارزیابی", "از ${evaluations.size.toPersian()} ارزیابی ثبت‌شده")
+        if (selected.isNotEmpty()) {
+            if (incomplete > 0) Note("${incomplete.toPersian()} مورد ناتمام است.")
+            if (perPerson.size > 1) {
+                FoldBox("به تفکیک نفر") {
+                    perPerson.forEach { (id, name, count) -> StyledName("• $name: ${count.toPersian()} ارزیابی", id in memberIds) }
+                }
             }
+        } else if (ready) {
+            Note(if (evaluations.isEmpty()) "هنوز ارزیابی‌ای ثبت نشده است." else "با این انتخاب ارزیابی‌ای پیدا نشد.")
         }
     }
-    AppCard(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        SectionTitle("آنچه ارسال می‌شود")
-        Text("دوره: $periodShown", fontWeight = FontWeight.Bold)
-        Text("نفر: $personShown", fontWeight = FontWeight.Bold)
-        Text("ارزیاب: $evaluatorShown", fontWeight = FontWeight.Bold)
-        Text("${filtered.size.toPersian()} ارزیابی از ${evaluations.size.toPersian()} ارزیابی ثبت‌شده", color = Purple, fontWeight = FontWeight.Bold)
-        if (filtered.isNotEmpty()) {
-            if (incomplete > 0) {
-                Text("${incomplete.toPersian()} مورد ناتمام است.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            }
-            FoldBox("به تفکیک نفر") {
-                perPerson.forEach { (id, name, count) -> StyledName("• $name: ${count.toPersian()} ارزیابی", id in memberIds) }
-            }
-        } else {
-            Text(
-                if (evaluations.isEmpty()) "هنوز ارزیابی‌ای ثبت نشده است." else "با این انتخاب ارزیابی‌ای پیدا نشد.",
-                color = Color.Gray,
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
-    }
-    AppCard(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        ExchangeRow(
-            sendEnabled = filtered.isNotEmpty(),
+
+    ExStep(3, "ارسال و دریافت") {
+        SendReceiveButtons(
+            sendLabel = "ارسال ${selected.size.toPersian()} ارزیابی",
+            sendEnabled = ready && selected.isNotEmpty(),
             sendFailed = sendFailed,
-            onSend = { sendFailed = !DataExchange.shareEvaluations(context, filtered) },
+            onSend = { sendFailed = !DataExchange.shareEvaluations(context, selected) },
             onReceive = onReceive
         )
-        Note("ارزیابی‌های دریافتی به ارزیابی‌های فعلی اضافه می‌شود و چیزی حذف نمی‌شود.")
+        Note(
+            "دریافت‌کننده: این ارزیابی‌ها به ارزیابی‌های خودش اضافه می‌شود و چیزی از اطلاعاتش حذف یا عوض نمی‌شود. " +
+                "ارزیابی‌ای که ارزیاب، نفر و دورهٔ آن با یکی از ارزیابی‌های او یکی باشد، تکراری است؛ ثبت نمی‌شود و به او هشدار داده می‌شود."
+        )
     }
 }
 
 // ============================================================ shared pieces
+
+private fun dateText(epoch: Long): String = JalaliDate.from(LocalDate.ofEpochDay(epoch)).display()
+
+/** A numbered step: every section reads top to bottom (what → summary → send / receive). */
+@Composable
+private fun ExStep(number: Int, title: String, content: @Composable ColumnScope.() -> Unit) {
+    AppCard(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(28.dp).clip(CircleShape).background(Purple), contentAlignment = Alignment.Center) {
+                Text(number.toPersian(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            }
+            Text(
+                title,
+                Modifier.padding(start = 10.dp),
+                fontWeight = FontWeight.Bold,
+                color = Navy,
+                style = MaterialTheme.typography.titleMedium
+            )
+        }
+        content()
+    }
+}
+
+@Composable
+private fun ModeOption(selected: Boolean, title: String, hint: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(selected = selected, onClick = onClick)
+        Column(Modifier.weight(1f).padding(end = 8.dp)) {
+            Text(title, fontWeight = FontWeight.Bold, color = if (selected) Purple else Color.Unspecified)
+            Text(hint, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun ModeChip(label: String, on: Boolean, onClick: () -> Unit) {
+    Surface(
+        color = if (on) Purple else Purple.copy(alpha = .12f),
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier.clip(RoundedCornerShape(20.dp)).clickable(onClick = onClick)
+    ) {
+        Text(
+            label,
+            Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+            color = if (on) Color.White else Purple,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelLarge
+        )
+    }
+}
+
+/** «از» / «تا» date boxes with the Jalali date picker; [onChange] gets the new (from, to). */
+@Composable
+private fun DateRangeBoxes(from: Long, to: Long, onChange: (Long, Long) -> Unit) {
+    var picker by rememberSaveable { mutableStateOf(0) } // 0 closed, 1 from, 2 to
+    val today = remember { LocalDate.now() }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { picker = 1 }, modifier = Modifier.weight(1f)) { Text(dateBoxText("از", from)) }
+        OutlinedButton(onClick = { picker = 2 }, modifier = Modifier.weight(1f)) { Text(dateBoxText("تا", to)) }
+    }
+    if (picker != 0) {
+        val current = if (picker == 1) from else to
+        JalaliDatePickerDialog(
+            initial = LocalDate.ofEpochDay(if (current == NO_DATE) today.toEpochDay() else current),
+            title = if (picker == 1) "تاریخ شروع بازه" else "تاریخ پایان بازه",
+            onDismiss = { picker = 0 },
+            onPick = { d ->
+                val e = d.toEpochDay()
+                if (picker == 1) onChange(e, if (to != NO_DATE && to < e) e else to)
+                else onChange(if (from != NO_DATE && from > e) e else from, e)
+                picker = 0
+            }
+        )
+    }
+}
+
+@Composable
+private fun BigCount(count: Int, unit: String, of: String = "") {
+    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(count.toPersian(), color = Purple, fontWeight = FontWeight.Bold, fontSize = 32.sp)
+        Text(unit, Modifier.padding(bottom = 6.dp), color = Purple, fontWeight = FontWeight.Bold)
+        if (of.isNotBlank()) Text(of, Modifier.padding(bottom = 6.dp), color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
+private fun SendReceiveButtons(
+    sendLabel: String,
+    sendEnabled: Boolean,
+    sendFailed: Boolean,
+    onSend: () -> Unit,
+    onReceive: () -> Unit
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Button(onClick = onSend, enabled = sendEnabled, modifier = Modifier.weight(1f)) { Text(sendLabel, maxLines = 1) }
+        OutlinedButton(onClick = onReceive, modifier = Modifier.weight(1f)) { Text("دریافت فایل", maxLines = 1) }
+    }
+    if (sendFailed) Text("ارسال انجام نشد.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+}
 
 @Composable
 private fun SectionSwitch(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
@@ -397,11 +495,11 @@ private fun SectionSwitch(options: List<String>, selected: Int, onSelect: (Int) 
 }
 
 @Composable
-private fun SectionTitle(text: String) {
-    Text(text, fontWeight = FontWeight.Bold, color = Purple, style = MaterialTheme.typography.titleMedium)
-}
-
-@Composable
-private fun Note(text: String) {
-    Text(text, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+private fun Note(text: String, warning: Boolean = false) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = if (warning) MaterialTheme.colorScheme.error else Color.Gray,
+        fontWeight = if (warning) FontWeight.Bold else FontWeight.Normal
+    )
 }

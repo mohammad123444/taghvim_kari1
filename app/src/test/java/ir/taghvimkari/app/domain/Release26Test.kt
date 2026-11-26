@@ -82,15 +82,12 @@ class Release26Test {
         assertEquals(plain, Secure.decrypt(Secure.encrypt(plain)))
     }
 
-    @Test fun similarReportsAreOnlyReplacedWithAReason() {
-        val mine = ReportEntry("a", "p", "علی", LocalDate.of(2026, 11, 1), "قدیمی", 1.0, 0.0, "")
-        val theirs = mine.copy(title = "جدید")
-        val keep = mergeReports(listOf(mine), listOf(theirs), emptyList(), replaceSimilar = false)
-        assertEquals(1, keep.conflicts)
-        assertEquals("قدیمی", keep.result.first().title)
-        val replaced = mergeReports(listOf(mine), listOf(theirs), emptyList(), replaceSimilar = true, reason = "اصلاح اشتباه")
-        assertEquals("جدید", replaced.result.first().title)
-        assertTrue(replaced.result.first().notes.contains("اصلاح اشتباه"))
+    @Test fun aReceivedReportNeverReplacesAnExistingOne() {
+        val mine = ReportEntry("a", "p", "علی", LocalDate.of(2026, 11, 1), "قدیمی", 1.0, 0.0, "", "رضا")
+        val theirs = mine.copy(id = "b", title = "جدید")
+        val m = mergeReports(listOf(mine), listOf(theirs), emptyList())
+        assertEquals(1, m.duplicates.size)
+        assertEquals("قدیمی", m.result.first().title)
     }
 
     @Test fun peopleHistorySurvivesSaving() {

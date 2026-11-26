@@ -107,66 +107,46 @@ object Evaluations {
     }
 }
 
-/** [conflicts] = received evaluations of the same person / evaluator / period with different scores (skipped unless replaced). */
+/**
+ * Result of receiving evaluations. [added] were registered; [duplicates] were NOT: the same evaluator had already
+ * evaluated the same person for the same period (in the current data, or earlier in the same file).
+ */
 data class EvaluationMerge(
     val result: List<EvaluationEntry>,
-    val added: Int,
-    val updated: Int,
-    val unchanged: Int,
-    val conflicts: Int = 0
+    val added: List<EvaluationEntry>,
+    val duplicates: List<EvaluationEntry>
 )
 
 /**
- * Adds evaluations received from another person to [current] without deleting anything.
- * People are matched by id, or by name when the id is unknown on this phone.
- * The same evaluation (same id, or same person + evaluator + period) is updated only if the received one
- * is more complete, or has the same id (the sender edited it).
+ * Adds received evaluations to [current] without deleting or changing anything. A received evaluation is a
+ * duplicate, and is never registered, when evaluator + person + period (from / to date) are all the same as an
+ * existing (or earlier received) one; if any of them differs it is registered.
  */
-fun mergeEvaluations(
-    current: List<EvaluationEntry>,
-    incoming: List<EvaluationEntry>,
-    people: List<Person>,
-    replaceSimilar: Boolean = true,
-    reason: String = ""
-): EvaluationMerge {
-    val ids = people.map { it.id }.toSet()
-    fun resolve(id: String, name: String): String =
-        if (id in ids) id
-        else people.firstOrNull { name.isNotBlank() && normalizeFa(it.name) == normalizeFa(name) }?.id ?: id
-
+fun mergeEvaluations(current: List<EvaluationEntry>, incoming: List<EvaluationEntry>, people: List<Person>): EvaluationMerge {
+    val who = PersonResolver(people)
+    fun keyOf(e: EvaluationEntry) = listOf(
+        who.key(e.evaluatorId, e.evaluatorName), who.key(e.personId, e.personName), e.date, e.dateTo
+    )
+    val seen = current.map(::keyOf).toHashSet()
+    val usedIds = current.map { it.id }.toHashSet()
     val out = current.toMutableList()
-    var added = 0
-    var updated = 0
-    var unchanged = 0
-    var conflicts = 0
+    val added = mutableListOf<EvaluationEntry>()
+    val duplicates = mutableListOf<EvaluationEntry>()
     for (raw in incoming) {
         val e = raw.copy(
-            personId = resolve(raw.personId, raw.personName),
-            evaluatorId = resolve(raw.evaluatorId, raw.evaluatorName)
+            personId = who.resolve(raw.personId, raw.personName),
+            evaluatorId = who.resolve(raw.evaluatorId, raw.evaluatorName)
         )
-        val byId = out.indexOfFirst { it.id == e.id }
-        val index = if (byId >= 0) byId else out.indexOfFirst {
-            it.personId == e.personId && it.evaluatorId == e.evaluatorId && it.date == e.date && it.dateTo == e.dateTo
-        }
-        if (index < 0) {
-            out.add(e)
-            added++
+        if (!seen.add(keyOf(e))) {
+            duplicates.add(raw)
             continue
         }
-        val old = out[index]
-        val moreComplete = (e.isComplete && !old.isComplete) || (e.isComplete == old.isComplete && e.doneCount > old.doneCount)
-        val lessComplete = old.isComplete && !e.isComplete
-        val take = e.scores != old.scores && (moreComplete || (byId >= 0 && !lessComplete))
-        if (take && !replaceSimilar) {
-            conflicts++
-        } else if (take) {
-            out[index] = e.copy(id = old.id, note = reason.trim().ifBlank { e.note })
-            updated++
-        } else {
-            unchanged++
-        }
+        val saved = if (e.id in usedIds) e.copy(id = java.util.UUID.randomUUID().toString()) else e
+        usedIds.add(saved.id)
+        out.add(saved)
+        added.add(saved)
     }
-    return EvaluationMerge(out, added, updated, unchanged, conflicts)
+    return EvaluationMerge(out, added, duplicates)
 }
 
 /** 38.347 -> "۳۸٫۳۵" */

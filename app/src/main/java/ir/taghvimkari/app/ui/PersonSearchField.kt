@@ -23,6 +23,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,7 +42,6 @@ import ir.taghvimkari.app.domain.Person
 import ir.taghvimkari.app.domain.toPersian
 import ir.taghvimkari.app.domain.nameMatches
 import ir.taghvimkari.app.domain.normalizeFa
-import ir.taghvimkari.app.domain.searchTooShort
 
 /**
  * Type part of a name and the matching full names are suggested right below, in alphabetical order.
@@ -61,6 +61,9 @@ fun PersonSearchField(
         ?: fallbackLabel?.takeIf { selectedId.isNotBlank() && it.isNotBlank() }
     var query by rememberSaveable { mutableStateOf(selectedLabel ?: "") }
     var focused by remember { mutableStateOf(false) }
+    // What was in the box before «پاک کردن»: shown as «بازگرداندن» so nothing is lost by a wrong tap.
+    var undoText by remember { mutableStateOf("") }
+    var undoId by remember { mutableStateOf("") }
     val focusManager = LocalFocusManager.current
 
     // A choice made elsewhere (or restored) shows its full name in the box.
@@ -70,12 +73,10 @@ fun PersonSearchField(
 
     val q = normalizeFa(query)
     val showing = focused && query != selectedLabel
-    // Nothing is found until three characters are typed.
-    val tooShort = searchTooShort(query)
+    // No name is listed until at least three characters are typed (also when the box is empty).
+    val tooShort = q.length < MIN_SEARCH_CHARS
     val suggestions = if (!showing || tooShort) {
         emptyList()
-    } else if (q.isBlank()) {
-        options
     } else {
         options.filter { nameMatches(it.second, query) }
     }
@@ -92,9 +93,11 @@ fun PersonSearchField(
     Column(modifier.bringIntoViewRequester(requester)) {
         OutlinedTextField(
             value = query,
+            // Typing does not throw the chosen person away: the choice stays until another name is picked
+            // (or the box is cleared), and leaving the box unfinished brings the chosen name back.
             onValueChange = {
                 query = it
-                if (selectedId.isNotBlank()) onSelect("")
+                undoText = ""
             },
             label = { Text(label) },
             placeholder = { Text("بخشی از نام را بنویسید") },
@@ -102,13 +105,26 @@ fun PersonSearchField(
             trailingIcon = {
                 if (query.isNotEmpty()) {
                     IconButton(onClick = {
+                        undoText = query
+                        undoId = selectedId
                         query = ""
                         onSelect("")
                     }) { Icon(Icons.Default.Clear, contentDescription = "پاک کردن") }
                 }
             },
-            modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }
+            modifier = Modifier.fillMaxWidth().onFocusChanged {
+                val left = focused && !it.isFocused
+                focused = it.isFocused
+                if (left && selectedLabel != null && query != selectedLabel) query = selectedLabel
+            }
         )
+        if (query.isEmpty() && undoText.isNotBlank()) {
+            TextButton(onClick = {
+                query = undoText
+                if (undoId.isNotBlank()) onSelect(undoId)
+                undoText = ""
+            }) { Text("↩ بازگرداندن «${undoText.trim()}»") }
+        }
         if (showing) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -137,6 +153,7 @@ fun PersonSearchField(
                                     .fillMaxWidth()
                                     .clickable {
                                         query = name
+                                        undoText = ""
                                         onSelect(person.id)
                                         focusManager.clearFocus()
                                     }

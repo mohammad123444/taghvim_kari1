@@ -13,7 +13,9 @@ data class ReportEntry(
     val title: String,
     val rewardHours: Double,
     val punishmentHours: Double,
-    val notes: String
+    val notes: String,
+    /** Who wrote the report (ثبت‌کننده). Together with the person and the date it identifies a report. */
+    val reporter: String = ""
 )
 
 data class ReportTotals(val count: Int, val reward: Double, val punishment: Double) {
@@ -70,6 +72,7 @@ fun buildReportText(
         appendLine("جزئیات:")
         entries.sortedBy { it.date }.forEach { e ->
             val parts = mutableListOf(JalaliDate.from(e.date).display(), nameOf(e), e.title)
+            if (e.reporter.isNotBlank()) parts.add("ثبت‌کننده: ${e.reporter.trim()}")
             if (e.rewardHours > 0) parts.add("تشویق ${formatHours(e.rewardHours)} ساعت")
             if (e.punishmentHours > 0) parts.add("تنبیه ${formatHours(e.punishmentHours)} ساعت")
             if (e.notes.isNotBlank()) parts.add(e.notes.trim())
@@ -84,49 +87,40 @@ data class ReportPeriod(val label: String, val from: LocalDate?, val to: LocalDa
         (from == null || !date.isBefore(from)) && (to == null || !date.isAfter(to))
 }
 
-/** [conflicts] = received items that look like existing ones but differ; they are skipped unless the caller replaces them. */
+/**
+ * Result of receiving reports. [added] were registered; [duplicates] were NOT: the same reporter had already
+ * reported the same person on the same date (in the current data, or earlier in the same file).
+ */
 data class ReportMerge(
     val result: List<ReportEntry>,
-    val added: Int,
-    val updated: Int,
-    val unchanged: Int,
-    val conflicts: Int = 0
+    val added: List<ReportEntry>,
+    val duplicates: List<ReportEntry>
 )
 
-/** Adds received reports to [current] without deleting anything; the same id is overwritten by the received copy. */
-fun mergeReports(
-    current: List<ReportEntry>,
-    incoming: List<ReportEntry>,
-    people: List<Person>,
-    replaceSimilar: Boolean = true,
-    reason: String = ""
-): ReportMerge {
-    val ids = people.map { it.id }.toSet()
+/**
+ * Adds received reports to [current] without deleting or changing anything. A received report is a duplicate, and is
+ * never registered, when reporter + person + date are all the same as an existing (or earlier received) report;
+ * if any of the three differs it is registered.
+ */
+fun mergeReports(current: List<ReportEntry>, incoming: List<ReportEntry>, people: List<Person>): ReportMerge {
+    val who = PersonResolver(people)
+    fun keyOf(e: ReportEntry) = Triple(normalizeFa(e.reporter), who.key(e.personId, e.personName), e.date)
+    val seen = current.map(::keyOf).toHashSet()
+    val usedIds = current.map { it.id }.toHashSet()
     val out = current.toMutableList()
-    var added = 0
-    var updated = 0
-    var unchanged = 0
-    var conflicts = 0
+    val added = mutableListOf<ReportEntry>()
+    val duplicates = mutableListOf<ReportEntry>()
     for (raw in incoming) {
-        val e = if (raw.personId in ids) raw else {
-            val match = people.firstOrNull { raw.personName.isNotBlank() && normalizeFa(it.name) == normalizeFa(raw.personName) }
-            if (match != null) raw.copy(personId = match.id) else raw
+        val e = raw.copy(personId = who.resolve(raw.personId, raw.personName))
+        if (!seen.add(keyOf(e))) {
+            duplicates.add(raw)
+            continue
         }
-        val index = out.indexOfFirst { it.id == e.id }
-        if (index < 0) {
-            out.add(e)
-            added++
-        } else if (out[index] == e) {
-            unchanged++
-        } else if (!replaceSimilar) {
-            conflicts++
-        } else {
-            // The earlier text is kept inside the notes together with the reason, so nothing is lost.
-            val old = out[index]
-            val trail = if (reason.isBlank()) "" else "\n[جایگزینی: ${reason.trim()}] سابقهٔ قبلی: ${old.title}"
-            out[index] = e.copy(notes = (e.notes + trail).trim())
-            updated++
-        }
+        // A different report may carry an id that is already used here: it gets its own id.
+        val saved = if (e.id in usedIds) e.copy(id = java.util.UUID.randomUUID().toString()) else e
+        usedIds.add(saved.id)
+        out.add(saved)
+        added.add(saved)
     }
-    return ReportMerge(out, added, updated, unchanged, conflicts)
+    return ReportMerge(out, added, duplicates)
 }

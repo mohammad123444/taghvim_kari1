@@ -33,25 +33,39 @@ fun bucketOf(person: Person, status: DayStatus): Bucket {
     }
 }
 
-/**
- * Lists everywhere show a team together: the shift leader first, immediately followed by
- * his members. People without a team come last.
- */
 /** Shift order everywhere: A, B, C, D, then people without a shift. */
 val Person.shiftRank: Int get() = SHIFT_NAMES.indexOf(shiftName).let { if (it < 0) SHIFT_NAMES.size else it }
 
-/** Shift A first, then B, C, D; inside a shift by name. */
-fun List<Person>.sortedByShiftName(): List<Person> =
-    sortedWith(compareBy<Person> { it.shiftRank }.thenComparator { a, b -> compareNames(a.name, b.name) })
+/** 0 = administrative staff, 1 = a shift leader or a member of a shift leader, 2 = other operational people. */
+val Person.listGroup: Int
+    get() = when {
+        category == Category.ADMIN -> 0
+        isLeader || leaderId != null -> 1
+        else -> 2
+    }
 
-fun <T> List<T>.sortedByTeam(leaderNames: Map<String, String>, person: (T) -> Person): List<T> =
-    sortedWith(
-        compareBy<T>(
-            { person(it).shiftRank },
-            { val p = person(it); if (p.isLeader || p.leaderId != null) 0 else 1 },
-            { val p = person(it); if (p.isLeader) p.name else (p.leaderId?.let { id -> leaderNames[id] } ?: p.name) },
-            { val p = person(it); p.leaderId ?: p.id },
-            { if (person(it).isLeader) 0 else 1 },
-            { person(it).name }
-        )
+/**
+ * The order of people in every list of the app. Employment first (رسمی، قراردادی، پیمانکاری); inside each:
+ * administrative staff, then shift leaders each followed by his members (shift A, B, C, D), then the other
+ * operational people. [leaderNames] maps a leader's id to his name so a team is kept together.
+ */
+fun <T> List<T>.sortedByTeam(leaderNames: Map<String, String>, person: (T) -> Person): List<T> {
+    fun teamName(p: Person) = if (p.isLeader) p.name else (p.leaderId?.let { leaderNames[it] } ?: p.name)
+    return sortedWith(
+        compareBy<T>({ person(it).employment.ordinal }, { person(it).listGroup }, { person(it).shiftRank })
+            .thenComparator { a, b -> compareNames(teamName(person(a)), teamName(person(b))) }
+            .thenBy { person(it).let { p -> p.leaderId ?: p.id } }
+            .thenBy { if (person(it).isLeader) 0 else 1 }
+            .thenComparator { a, b -> compareNames(person(a).name, person(b).name) }
     )
+}
+
+/** People in the standard display order (see [sortedByTeam]); the leaders are taken from the list itself. */
+fun List<Person>.sortedByShiftName(): List<Person> {
+    val leaderNames = filter { it.isLeader }.associate { it.id to it.name }
+    return sortedByTeam(leaderNames) { it }
+}
+
+/** Position of every person in the standard display order, to sort things that belong to people (records...). */
+fun List<Person>.displayOrder(): Map<String, Int> =
+    sortedByShiftName().mapIndexed { index, p -> p.id to index }.toMap()

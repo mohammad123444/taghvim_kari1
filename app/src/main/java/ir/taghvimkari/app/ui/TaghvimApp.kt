@@ -63,7 +63,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ir.taghvimkari.app.domain.JalaliDate
 import ir.taghvimkari.app.domain.Person
+import ir.taghvimkari.app.domain.periodText
 import ir.taghvimkari.app.domain.toPersian
 import java.time.LocalDate
 
@@ -222,7 +224,7 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
                         if (hasPeople) "${incoming.people.size.toPersian()} نفر" else null
                     ) + others).joinToString("، ") + " هست. " +
                         (if (hasPeople) {
-                            "فهرست نیروهای فعلی این گوشی (${viewModel.people.size.toPersian()} نفر) کاملاً با آن جایگزین می‌شود (ادغام انجام نمی‌شود) و نام‌های تکراری ثبت نمی‌شوند. "
+                            "فهرست نیروهای فعلی این گوشی (${viewModel.people.size.toPersian()} نفر) کاملاً پاک و با این فایل جایگزین می‌شود؛ هیچ نامی از فهرست قبلی نمی‌ماند (ادغام انجام نمی‌شود) و نام‌های تکراری داخل فایل ثبت نمی‌شوند. "
                         } else "") +
                         (if (others.isNotEmpty()) {
                             "بقیهٔ موارد به اطلاعات فعلی اضافه می‌شود و چیزی از آن‌ها حذف نمی‌شود. "
@@ -230,35 +232,40 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
                         "ادامه می‌دهید؟"
                 )
             },
-            confirmButton = { TextButton(onClick = viewModel::confirmImport) { Text(if (incoming.people.isNotEmpty()) "جایگزین کن" else "اضافه کن", fontWeight = FontWeight.Bold) } },
+            confirmButton = { TextButton(onClick = viewModel::confirmImport) { Text(if (incoming.people.isNotEmpty()) "پاک و جایگزین کن" else "اضافه کن", fontWeight = FontWeight.Bold) } },
             dismissButton = { TextButton(onClick = viewModel::cancelImport) { Text("انصراف") } }
         )
     }
 
     viewModel.pendingReports?.let { incoming ->
         val merge = viewModel.previewReportMerge(incoming)
-        MergeDialog(
+        ImportReviewDialog(
             title = "دریافت سوابق",
             what = "سابقه",
             total = incoming.size,
-            added = merge.added,
-            unchanged = merge.unchanged,
-            conflicts = merge.conflicts,
-            onConfirm = { replace, reason -> viewModel.confirmReportImport(replace, reason) },
+            newCount = merge.added.size,
+            duplicateLines = merge.duplicates.map { e ->
+                val by = if (e.reporter.isBlank()) "" else " — ثبت‌کننده: ${e.reporter.trim()}"
+                "${e.personName} — ${JalaliDate.from(e.date).display()}$by"
+            },
+            rule = "سابقه‌ای تکراری است که ثبت‌کننده، نفر و تاریخ آن با یک سابقهٔ ثبت‌شده یکی باشد.",
+            onConfirm = viewModel::confirmReportImport,
             onCancel = viewModel::cancelReportImport
         )
     }
 
     viewModel.pendingEvaluations?.let { incoming ->
         val merge = viewModel.previewEvaluationMerge(incoming)
-        MergeDialog(
+        ImportReviewDialog(
             title = "دریافت ارزیابی‌ها",
             what = "ارزیابی",
             total = incoming.size,
-            added = merge.added,
-            unchanged = merge.unchanged,
-            conflicts = merge.conflicts,
-            onConfirm = { replace, reason -> viewModel.confirmEvaluationImport(replace, reason) },
+            newCount = merge.added.size,
+            duplicateLines = merge.duplicates.map { e ->
+                "${e.personName} — ${e.periodText()} — ارزیاب: ${e.evaluatorName}"
+            },
+            rule = "ارزیابی‌ای تکراری است که ارزیاب، نفر و دورهٔ ارزیابی آن با یک ارزیابی ثبت‌شده یکی باشد.",
+            onConfirm = viewModel::confirmEvaluationImport,
             onCancel = viewModel::cancelEvaluationImport
         )
     }
@@ -382,59 +389,49 @@ private fun AppNavigation(selected: Int, onSelect: (Int) -> Unit) {
 }
 
 /**
- * Received records / evaluations are always merged into the current ones (nothing is deleted).
- * When some look like existing ones but differ, the person chooses: keep the existing ones, or replace them
- * after writing the reason.
+ * Received records / evaluations are checked BEFORE they are merged: the new ones are added to the current data,
+ * the duplicates are listed here as a warning and are never registered. Nothing existing is changed or deleted.
  */
 @Composable
-private fun MergeDialog(
+private fun ImportReviewDialog(
     title: String,
     what: String,
     total: Int,
-    added: Int,
-    unchanged: Int,
-    conflicts: Int,
-    onConfirm: (replaceSimilar: Boolean, reason: String) -> Unit,
+    newCount: Int,
+    duplicateLines: List<String>,
+    rule: String,
+    onConfirm: () -> Unit,
     onCancel: () -> Unit
 ) {
-    var reason by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text(title, fontWeight = FontWeight.Bold) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("در فایل دریافتی ${total.toPersian()} $what هست.")
                 Text(
-                    "در فایل دریافتی ${total.toPersian()} $what هست: ${added.toPersian()} مورد جدید و " +
-                        "${unchanged.toPersian()} مورد بدون تغییر. اطلاعات فعلی حذف نمی‌شود و موارد جدید به آن اضافه می‌شود."
+                    if (newCount > 0) "${newCount.toPersian()} $what جدید است و به اطلاعات فعلی اضافه می‌شود؛ چیزی از اطلاعات فعلی حذف یا عوض نمی‌شود."
+                    else "هیچ $what جدیدی در این فایل نیست.",
+                    fontWeight = FontWeight.Bold
                 )
-                if (conflicts > 0) {
+                if (duplicateLines.isNotEmpty()) {
                     Text(
-                        "${conflicts.toPersian()} مورد مشابه موارد فعلی است ولی تفاوت دارد. اگر نیاز به جایگزینی دارد، دلیل را بنویسید؛ در غیر این صورت موارد فعلی می‌مانند.",
+                        "هشدار: ${duplicateLines.size.toPersian()} $what تکراری است و ثبت نمی‌شود:",
                         color = MaterialTheme.colorScheme.error,
                         fontWeight = FontWeight.Bold
                     )
-                    OutlinedTextField(
-                        value = reason,
-                        onValueChange = { reason = it },
-                        label = { Text("دلیل جایگزینی") },
-                        minLines = 2,
-                        modifier = Modifier.fillMaxWidth().keepVisibleWhenFocused()
-                    )
+                    duplicateLines.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
+                    Text(rule, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                 }
             }
         },
         confirmButton = {
-            Row {
-                if (conflicts > 0) {
-                    TextButton(onClick = { onConfirm(true, reason) }, enabled = reason.isNotBlank()) {
-                        Text("جایگزین کن", fontWeight = FontWeight.Bold)
-                    }
-                }
-                TextButton(onClick = { onConfirm(false, "") }) {
-                    Text(if (conflicts > 0) "فقط موارد جدید" else "اضافه کن", fontWeight = FontWeight.Bold)
-                }
+            if (newCount > 0) {
+                TextButton(onClick = onConfirm) { Text("ثبت ${newCount.toPersian()} $what جدید", fontWeight = FontWeight.Bold) }
+            } else {
+                TextButton(onClick = onCancel) { Text("باشه", fontWeight = FontWeight.Bold) }
             }
         },
-        dismissButton = { TextButton(onClick = onCancel) { Text("انصراف") } }
+        dismissButton = if (newCount > 0) { { TextButton(onClick = onCancel) { Text("انصراف") } } } else null
     )
 }

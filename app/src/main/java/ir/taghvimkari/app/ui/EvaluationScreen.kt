@@ -83,6 +83,7 @@ import ir.taghvimkari.app.domain.normalizeFa
 import ir.taghvimkari.app.domain.searchTooShort
 import ir.taghvimkari.app.domain.SHIFT_NAMES
 import ir.taghvimkari.app.domain.compareNames
+import ir.taghvimkari.app.domain.displayOrder
 import ir.taghvimkari.app.domain.shiftRank
 import ir.taghvimkari.app.domain.sortedByShiftName
 import ir.taghvimkari.app.domain.WorkingDraft
@@ -880,12 +881,12 @@ private fun ResultsSection(
     val labelled = remember(people) { uniqueLabels(people).map { (p, n) -> p to if (p.active) n else "$n (غیرفعال)" } }
     val evaluatorIds = remember(evaluations) { evaluations.map { it.evaluatorId }.filter { it.isNotBlank() }.distinct() }
     val nameById = remember(people) { people.associate { it.id to it.name } }
-    val rankById = remember(people) { people.associate { it.id to it.shiftRank } }
+    val rankById = remember(people) { people.displayOrder() }
     val memberIds = remember(people) { people.filter { it.isMember }.map { it.id }.toSet() }
     val evaluatorList = remember(evaluations, people) {
         evaluatorIds
             .map { id -> id to (nameById[id] ?: evaluations.firstOrNull { it.evaluatorId == id }?.evaluatorName.orEmpty()) }
-            .sortedWith(compareBy<Pair<String, String>> { rankById[it.first] ?: 9 }.thenComparator { a, b -> compareNames(a.second, b.second) })
+            .sortedWith(compareBy<Pair<String, String>> { rankById[it.first] ?: Int.MAX_VALUE }.thenComparator { a, b -> compareNames(a.second, b.second) })
     }
     val evaluatorLabels = remember(evaluatorList) { numberedLabels(evaluatorList.map { it.second }) }
     val nameOf: (EvaluationEntry) -> String = { e -> nameById[e.personId] ?: e.personName }
@@ -899,7 +900,7 @@ private fun ResultsSection(
                 (evaluatorFilter.isBlank() || it.evaluatorId == evaluatorFilter) &&
                 (periodFilter.isBlank() || it.periodKey == periodFilter)
         }
-        .sortedWith(compareBy<EvaluationEntry> { rankById[it.personId] ?: 9 }.thenByDescending { it.date }.thenBy { nameOf(it) })
+        .sortedWith(compareBy<EvaluationEntry> { rankById[it.personId] ?: Int.MAX_VALUE }.thenByDescending { it.date }.thenBy { nameOf(it) })
 
     // ----- filters and delete: folded until needed, a dot shows while a filter is on
     FoldBox(
@@ -998,7 +999,7 @@ private fun ResultsSection(
     if (personFilter.isBlank()) {
         val perPerson = done.groupBy { it.personId }
             .map { (id, list) -> Triple(id, nameOf(list.first()), list) }
-            .sortedWith(compareBy<Triple<String, String, List<EvaluationEntry>>> { rankById[it.first] ?: 9 }.thenByDescending { Evaluations.average(it.third) })
+            .sortedWith(compareBy<Triple<String, String, List<EvaluationEntry>>> { rankById[it.first] ?: Int.MAX_VALUE }.thenByDescending { Evaluations.average(it.third) })
         FoldBox("میانگین هر نفر") {
                 perPerson.forEach { (id, name, list) ->
                     val avg = Evaluations.average(list)
@@ -1035,7 +1036,7 @@ private fun ResultsSection(
             val name = nameById[id] ?: list.firstOrNull { it.evaluatorName.isNotBlank() }?.evaluatorName.orEmpty()
             Triple(id, name.ifBlank { "ارزیاب نامشخص" }, list)
         }
-        .sortedWith(compareBy<Triple<String, String, List<EvaluationEntry>>> { rankById[it.first] ?: 9 }.thenComparator { a, b -> compareNames(a.second, b.second) })
+        .sortedWith(compareBy<Triple<String, String, List<EvaluationEntry>>> { rankById[it.first] ?: Int.MAX_VALUE }.thenComparator { a, b -> compareNames(a.second, b.second) })
     val flipped = flippedGroups.split(",").toSet()
     groups.forEach { (id, evaluatorName, list) ->
         val key = id.ifBlank { "-" }
@@ -1184,11 +1185,12 @@ internal fun AdvancedReportSection(people: List<Person>, evaluations: List<Evalu
             p.employment.name in emps && p.category.name in cats &&
             p.shiftName.ifBlank { "-" } in shifts
     }
+    val advancedOrder = remember(people) { people.displayOrder() }
     val average = Evaluations.average(matched)
     val level = Evaluations.levelOf(average)
     val perPerson = matched.groupBy { it.personId }
         .map { (id, list) -> PersonAverage(byId.getValue(id), Evaluations.average(list), list.size) }
-        .sortedWith(compareBy<PersonAverage> { it.person.shiftRank }.thenByDescending { it.average })
+        .sortedWith(compareBy<PersonAverage> { advancedOrder[it.person.id] ?: Int.MAX_VALUE }.thenByDescending { it.average })
 
     fun rowsBy(groups: List<Pair<String, (Person) -> Boolean>>) = groups.mapNotNull { (label, test) ->
         val list = matched.filter { e -> byId[e.personId]?.let(test) == true }

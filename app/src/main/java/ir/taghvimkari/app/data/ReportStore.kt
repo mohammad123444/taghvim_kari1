@@ -35,6 +35,7 @@ class ReportStore(context: Context) {
                         put("rewardHours", r.rewardHours)
                         put("punishmentHours", r.punishmentHours)
                         put("notes", r.notes)
+                        put("reporter", r.reporter)
                     }
                 )
             }
@@ -51,7 +52,8 @@ class ReportStore(context: Context) {
                     title = o.optString("title", ""),
                     rewardHours = o.optDouble("rewardHours", 0.0),
                     punishmentHours = o.optDouble("punishmentHours", 0.0),
-                    notes = o.optString("notes", "")
+                    notes = o.optString("notes", ""),
+                    reporter = o.optString("reporter", "")
                 )
             }.getOrNull()
         }

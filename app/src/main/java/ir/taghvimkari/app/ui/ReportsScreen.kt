@@ -57,6 +57,7 @@ import ir.taghvimkari.app.domain.ReportTotals
 import ir.taghvimkari.app.domain.buildReportText
 import ir.taghvimkari.app.domain.formatHours
 import ir.taghvimkari.app.domain.parseHours
+import ir.taghvimkari.app.domain.displayOrder
 import ir.taghvimkari.app.domain.shiftRank
 import ir.taghvimkari.app.domain.sortedByShiftName
 import ir.taghvimkari.app.domain.toPersian
@@ -91,20 +92,20 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
     val labelled = remember(people) { uniqueLabels(people).map { (p, n) -> p to if (p.active) n else "$n (غیرفعال)" } }
     val activeLabelled = remember(people) { uniqueLabels(people.filter { it.active }) }
     val nameById = remember(people) { people.associate { it.id to it.name } }
-    val rankById = remember(people) { people.associate { it.id to it.shiftRank } }
+    val rankById = remember(people) { people.displayOrder() }
     val memberIds = remember(people) { people.filter { it.isMember }.map { it.id }.toSet() }
     val nameOf: (ReportEntry) -> String = { e -> nameById[e.personId] ?: e.personName }
 
     val period = remember(mode, customFrom, customTo) { periodFor(mode, todayJalali, customFrom, customTo) }
     val filtered = reports
         .filter { period.contains(it.date) && (personFilter.isBlank() || it.personId == personFilter) }
-        .sortedWith(compareBy<ReportEntry> { rankById[it.personId] ?: 9 }.thenByDescending { it.date }.thenBy { nameOf(it) })
+        .sortedWith(compareBy<ReportEntry> { rankById[it.personId] ?: Int.MAX_VALUE }.thenByDescending { it.date }.thenBy { nameOf(it) })
     val totals = filtered.totals()
     val filterLabel = labelled.firstOrNull { it.first.id == personFilter }?.second ?: ALL_PEOPLE
     val perPerson = if (personFilter.isBlank()) {
         filtered.groupBy { it.personId }
             .map { (id, list) -> Triple(id, nameOf(list.first()), list.totals()) }
-            .sortedWith(compareBy<Triple<String, String, ReportTotals>> { rankById[it.first] ?: 9 }.thenByDescending { it.third.net })
+            .sortedWith(compareBy<Triple<String, String, ReportTotals>> { rankById[it.first] ?: Int.MAX_VALUE }.thenByDescending { it.third.net })
     } else {
         emptyList()
     }
@@ -257,7 +258,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
                 onToggle = { flip(key) }, unit = "سابقه"
             ) {
                 list.groupBy { it.personId }.entries
-                    .sortedWith(compareBy<Map.Entry<String, List<ReportEntry>>> { rankById[it.key] ?: 9 }.thenBy { nameOf(it.value.first()) })
+                    .sortedWith(compareBy<Map.Entry<String, List<ReportEntry>>> { rankById[it.key] ?: Int.MAX_VALUE }.thenBy { nameOf(it.value.first()) })
                     .forEach { (personId, personList) ->
                         val personKey = "$key-$personId"
                         FoldSection(
@@ -307,6 +308,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
             labelled = activeLabelled,
             initial = null,
             presetPersonId = personFilter,
+            lastReporter = viewModel.lastReporter,
             onDismiss = { showNew = false },
             onSave = { viewModel.saveReport(it); showNew = false },
             onDelete = null
@@ -319,6 +321,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
             labelled = labelled,
             initial = editing,
             presetPersonId = "",
+            lastReporter = viewModel.lastReporter,
             onDismiss = { editingId = null },
             onSave = { viewModel.saveReport(it); editingId = null },
             onDelete = { viewModel.deleteReport(editing.id); editingId = null }
@@ -367,6 +370,9 @@ private fun ReportCard(entry: ReportEntry, name: String, member: Boolean, kind: 
             if (entry.notes.isNotBlank()) {
                 Text(entry.notes, color = Color(0xFF6B6B88), fontSize = 12.sp, fontWeight = FontWeight.Normal)
             }
+            if (entry.reporter.isNotBlank()) {
+                Text("ثبت‌کننده: ${entry.reporter}", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+            }
     }
 }
 
@@ -389,6 +395,7 @@ private fun ReportEntryDialog(
     labelled: List<Pair<Person, String>>,
     initial: ReportEntry?,
     presetPersonId: String,
+    lastReporter: String,
     onDismiss: () -> Unit,
     onSave: (ReportEntry) -> Unit,
     onDelete: (() -> Unit)?
@@ -397,6 +404,7 @@ private fun ReportEntryDialog(
     var personId by rememberSaveable { mutableStateOf(initial?.personId ?: presetPersonId) }
     var dateEpoch by rememberSaveable { mutableStateOf((initial?.date ?: today).toEpochDay()) }
     var title by rememberSaveable { mutableStateOf(initial?.title ?: "") }
+    var reporter by rememberSaveable { mutableStateOf(initial?.reporter ?: lastReporter) }
     var reward by rememberSaveable { mutableStateOf(initial?.rewardHours?.takeIf { it > 0 }?.let { formatHours(it) } ?: "") }
     var punishment by rememberSaveable { mutableStateOf(initial?.punishmentHours?.takeIf { it > 0 }?.let { formatHours(it) } ?: "") }
     var notes by rememberSaveable { mutableStateOf(initial?.notes ?: "") }
@@ -422,6 +430,13 @@ private fun ReportEntryDialog(
                 OutlinedButton(onClick = { showPicker = true }, modifier = Modifier.fillMaxWidth()) {
                     Text("تاریخ: ${JalaliDate.from(date).display()}")
                 }
+                OutlinedTextField(
+                    value = reporter, onValueChange = { reporter = it },
+                    label = { Text("ثبت‌کننده (چه کسی گزارش را ثبت می‌کند؟)") },
+                    singleLine = true,
+                    isError = showErrors && initial == null && reporter.isBlank(),
+                    modifier = Modifier.fillMaxWidth()
+                )
                 OutlinedTextField(
                     value = title, onValueChange = { title = it },
                     label = { Text("سابقه (موضوع)") },
@@ -454,7 +469,7 @@ private fun ReportEntryDialog(
         },
         confirmButton = {
             Button(onClick = {
-                if (personId.isNotBlank() && title.isNotBlank()) {
+                if (personId.isNotBlank() && title.isNotBlank() && (initial != null || reporter.isNotBlank())) {
                     val person = labelled.firstOrNull { it.first.id == personId }?.first
                     onSave(
                         ReportEntry(
@@ -465,7 +480,8 @@ private fun ReportEntryDialog(
                             title = title.trim(),
                             rewardHours = parseHours(reward),
                             punishmentHours = parseHours(punishment),
-                            notes = notes.trim()
+                            notes = notes.trim(),
+                            reporter = reporter.trim()
                         )
                     )
                 } else {

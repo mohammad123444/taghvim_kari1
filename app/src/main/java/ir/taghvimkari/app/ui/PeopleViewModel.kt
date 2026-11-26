@@ -262,11 +262,11 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
                 if (dropped.isNotEmpty()) duplicateAlarm = dropped
             }
             data.reports?.let {
-                reports = mergeReports(reports, it, people, replaceSimilar = false).result
+                reports = mergeReports(reports, it, people).result
                 reportStore.save(reports)
             }
             data.evaluations?.let {
-                evaluations = mergeEvaluations(evaluations, it, people, replaceSimilar = false).result
+                evaluations = mergeEvaluations(evaluations, it, people).result
                 evaluationStore.save(evaluations)
             }
             data.summary?.let {
@@ -277,8 +277,13 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
         pendingImport = null
     }
 
+    /** The reporter of the last saved report; pre-filled in the next new report. */
+    var lastReporter: String by mutableStateOf("")
+        private set
+
     /** Adds a new report or replaces the one with the same id. */
     fun saveReport(entry: ReportEntry) {
+        if (entry.reporter.isNotBlank()) lastReporter = entry.reporter
         reports = if (reports.any { it.id == entry.id }) {
             reports.map { if (it.id == entry.id) entry else it }
         } else {
@@ -350,14 +355,14 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
         pendingImport = null
     }
 
-    /** What merging the received reports would do (shown before the user confirms). */
+    /** What receiving the reports would do (checked before anything is registered): which are new, which duplicates. */
     fun previewReportMerge(incoming: List<ReportEntry>): ReportMerge =
-        mergeReports(reports, incoming, people, replaceSimilar = false)
+        mergeReports(reports, incoming, people)
 
-    /** Merges the received reports; similar ones are only replaced when [replaceSimilar] (with a [reason]). */
-    fun confirmReportImport(replaceSimilar: Boolean = false, reason: String = "") {
+    /** Registers the new received reports; duplicates (same reporter, person and date) are never registered. */
+    fun confirmReportImport() {
         pendingReports?.let { incoming ->
-            reports = mergeReports(reports, incoming, people, replaceSimilar, reason).result
+            reports = mergeReports(reports, incoming, people).result
             reportStore.save(reports)
         }
         pendingReports = null
@@ -367,14 +372,14 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
         pendingReports = null
     }
 
-    /** What merging the received evaluations would do (shown before the user confirms). */
+    /** What receiving the evaluations would do (checked before anything is registered). */
     fun previewEvaluationMerge(incoming: List<EvaluationEntry>): EvaluationMerge =
-        mergeEvaluations(evaluations, incoming, people, replaceSimilar = false)
+        mergeEvaluations(evaluations, incoming, people)
 
-    /** Merges the received evaluations; similar ones are only replaced when [replaceSimilar] (with a [reason]). */
-    fun confirmEvaluationImport(replaceSimilar: Boolean = false, reason: String = "") {
+    /** Registers the new received evaluations; duplicates (same evaluator, person and period) are never registered. */
+    fun confirmEvaluationImport() {
         pendingEvaluations?.let { incoming ->
-            evaluations = mergeEvaluations(evaluations, incoming, people, replaceSimilar, reason).result
+            evaluations = mergeEvaluations(evaluations, incoming, people).result
             evaluationStore.save(evaluations)
         }
         pendingEvaluations = null

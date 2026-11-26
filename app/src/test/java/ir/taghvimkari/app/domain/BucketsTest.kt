@@ -15,9 +15,10 @@ class BucketsTest {
         name: String = "x",
         id: String = name,
         leader: Boolean = false,
-        leaderId: String? = null
+        leaderId: String? = null,
+        employment: Employment = Employment.OFFICIAL
     ) = Person(
-        id = id, name = name, workType = WorkTypes.default, employment = Employment.OFFICIAL,
+        id = id, name = name, workType = WorkTypes.default, employment = employment,
         pattern = pattern, startDate = saturday, startWeekday = 0,
         isLeader = leader, leaderId = leaderId, category = category
     )
@@ -62,6 +63,18 @@ class BucketsTest {
         val single = person(Pattern.WORK_REST, name = "پ", id = "S")
         val sorted = listOf(member, single, leader).sortedByTeam(mapOf("L" to "ب")) { it }
         assertEquals(listOf("L", "M", "S"), sorted.map { it.id })
+    }
+
+    @Test fun peopleAreListedByEmploymentThenAdminThenTeamsThenOthers() {
+        val contractorTeam = person(Pattern.WORK_REST, name = "آ", id = "CT", employment = Employment.CONTRACTOR)
+        val otherOfficial = person(Pattern.WORK_REST, name = "الف", id = "OO")
+        val contractualAdmin = person(Pattern.WORK_REST, Category.ADMIN, name = "ب", id = "CA", employment = Employment.CONTRACTUAL)
+        val leader = person(Pattern.WORK_REST, name = "ز", id = "L", leader = true)
+        val member = person(Pattern.WORK_REST, name = "ی", id = "M", leaderId = "L")
+        val officialAdmin = person(Pattern.WORK_REST, Category.ADMIN, name = "ی", id = "OA")
+        val sorted = listOf(contractorTeam, otherOfficial, contractualAdmin, member, leader, officialAdmin).sortedByShiftName()
+        // رسمی: اداری، سرشیفت و زیرمجموعه، سایر عملیاتی؛ بعد قراردادی؛ بعد پیمانکاری
+        assertEquals(listOf("OA", "L", "M", "OO", "CA", "CT"), sorted.map { it.id })
     }
 
     @Test fun twoWeekRestSplitsDays1to7AndDays8to14() {

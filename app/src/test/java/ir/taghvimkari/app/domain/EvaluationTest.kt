@@ -72,21 +72,22 @@ class EvaluationTest {
     @Test fun mergeAddsNewAndKeepsExisting() {
         val m = mergeEvaluations(listOf(entry(5)), listOf(draft("other", 5, person = "q")), emptyList())
         assertEquals(2, m.result.size)
-        assertEquals(1, m.added)
+        assertEquals(1, m.added.size)
     }
 
-    @Test fun mergeContinuesADraftWithTheMoreCompleteCopy() {
+    @Test fun sameEvaluatorPersonAndPeriodIsADuplicateAndIsNeverRegistered() {
+        // different id and different scores, but the same evaluator, person and period
         val m = mergeEvaluations(listOf(draft("a", 5)), listOf(draft("b", 12)), emptyList())
         assertEquals(1, m.result.size)
-        assertEquals(12, m.result.first().doneCount)
-        assertEquals("a", m.result.first().id)
-        assertEquals(1, m.updated)
+        assertEquals(5, m.result.first().doneCount)
+        assertEquals(1, m.duplicates.size)
+        assertEquals(0, m.added.size)
     }
 
-    @Test fun mergeNeverReplacesACompleteEvaluationWithADraft() {
-        val m = mergeEvaluations(listOf(entry(5)), listOf(draft("b", 3)), emptyList())
-        assertTrue(m.result.first().isComplete)
-        assertEquals(1, m.unchanged)
+    @Test fun aDifferentEvaluatorIsNotADuplicate() {
+        val m = mergeEvaluations(listOf(entry(5)), listOf(entry(5).copy(id = "x", evaluatorId = "other", evaluatorName = "علی")), emptyList())
+        assertEquals(2, m.result.size)
+        assertEquals(1, m.added.size)
     }
 
     @Test fun mergeMatchesPeopleByNameWhenIdsDiffer() {
@@ -113,7 +114,7 @@ class EvaluationTest {
         val november = entry(5).copy(id = "b", date = LocalDate.of(2026, 11, 1), dateTo = LocalDate.of(2026, 11, 30))
         val m = mergeEvaluations(listOf(october), listOf(november), emptyList())
         assertEquals(2, m.result.size)
-        assertEquals(1, m.added)
+        assertEquals(1, m.added.size)
     }
 
     @Test fun mergingEvaluationsFromSeveralEvaluatorsKeepsEverything() {

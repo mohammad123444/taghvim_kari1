@@ -44,22 +44,70 @@ class ReportsTest {
         assertEquals(true, ReportPeriod("all", null, null).contains(LocalDate.of(1999, 1, 1)))
     }
 
-    @Test fun mergingReportsKeepsExistingAndAddsNew() {
-        val mine = entry("a", 2.0, 0.0)
-        val theirs = entry("b", 1.0, 0.0)
-        val m = mergeReports(listOf(mine), listOf(theirs, mine), emptyList())
+    private fun report(person: String, reporter: String, day: Int, id: String = "$person$reporter$day") = ReportEntry(
+        id = id, personId = person, personName = person, date = LocalDate.of(2026, 11, day),
+        title = "t", rewardHours = 1.0, punishmentHours = 0.0, notes = "", reporter = reporter
+    )
+
+    @Test fun mergingReportsAddsNewOnesAndKeepsExisting() {
+        val mine = report("a", "رضا", 1)
+        val theirs = report("b", "رضا", 1)
+        val m = mergeReports(listOf(mine), listOf(theirs), emptyList())
         assertEquals(2, m.result.size)
-        assertEquals(1, m.added)
-        assertEquals(1, m.unchanged)
-        assertEquals(0, m.updated)
+        assertEquals(1, m.added.size)
+        assertEquals(0, m.duplicates.size)
     }
 
-    @Test fun mergingReportsUpdatesTheSameIdOnly() {
-        val mine = entry("a", 2.0, 0.0)
-        val edited = mine.copy(title = "changed")
-        val m = mergeReports(listOf(mine), listOf(edited), emptyList())
+    @Test fun sameReporterPersonAndDateIsADuplicateAndIsNeverRegistered() {
+        val mine = report("a", "رضا", 1, id = "mine")
+        // different id and different text, but the same three: reporter, person, date
+        val theirs = mine.copy(id = "theirs", title = "another text", rewardHours = 5.0)
+        val m = mergeReports(listOf(mine), listOf(theirs), emptyList())
+        assertEquals(listOf(mine), m.result)
+        assertEquals(0, m.added.size)
+        assertEquals(listOf(theirs), m.duplicates)
+    }
+
+    @Test fun aDifferenceInReporterPersonOrDateIsRegistered() {
+        val mine = report("a", "رضا", 1)
+        val m = mergeReports(
+            listOf(mine),
+            listOf(report("a", "علی", 1), report("b", "رضا", 1), report("a", "رضا", 2)),
+            emptyList()
+        )
+        assertEquals(4, m.result.size)
+        assertEquals(3, m.added.size)
+        assertEquals(0, m.duplicates.size)
+    }
+
+    @Test fun receivingTheSameFileTwiceRegistersNothingTheSecondTime() {
+        val file = listOf(report("a", "رضا", 1), report("b", "رضا", 2))
+        val first = mergeReports(emptyList(), file, emptyList())
+        val second = mergeReports(first.result, file, emptyList())
+        assertEquals(2, first.added.size)
+        assertEquals(0, second.added.size)
+        assertEquals(2, second.duplicates.size)
+        assertEquals(2, second.result.size)
+    }
+
+    @Test fun duplicatesInsideOneFileAreRegisteredOnce() {
+        val one = report("a", "رضا", 1, id = "x")
+        val m = mergeReports(emptyList(), listOf(one, one.copy(id = "y")), emptyList())
         assertEquals(1, m.result.size)
-        assertEquals("changed", m.result.first().title)
-        assertEquals(1, m.updated)
+        assertEquals(1, m.duplicates.size)
+    }
+
+    @Test fun reporterNamesAreComparedLikeSearchedNames() {
+        val mine = report("a", "علی", 1)
+        val m = mergeReports(listOf(mine), listOf(report("a", "علي", 1, id = "z")), emptyList())
+        assertEquals(1, m.duplicates.size)
+    }
+
+    @Test fun aDifferentReportWithAnIdAlreadyUsedGetsANewId() {
+        val mine = report("a", "رضا", 1, id = "same")
+        val theirs = report("b", "رضا", 1, id = "same")
+        val m = mergeReports(listOf(mine), listOf(theirs), emptyList())
+        assertEquals(2, m.result.size)
+        assertEquals(2, m.result.map { it.id }.toSet().size)
     }
 }
