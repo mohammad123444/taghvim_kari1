@@ -32,7 +32,9 @@ import androidx.compose.ui.unit.sp
 import ir.taghvimkari.app.domain.Employment
 import ir.taghvimkari.app.domain.JalaliDate
 import ir.taghvimkari.app.domain.Person
-import ir.taghvimkari.app.domain.SHIFT_NAMES
+import ir.taghvimkari.app.domain.ORDINARY_SHIFT
+import ir.taghvimkari.app.domain.shiftGroups
+import ir.taghvimkari.app.domain.shiftTitle
 import ir.taghvimkari.app.domain.sortedByTeam
 import ir.taghvimkari.app.domain.toPersian
 import kotlinx.coroutines.delay
@@ -96,7 +98,8 @@ private val SHIFT_ACCENT = mapOf(
     "A" to Color(0xFF3F51B5),
     "B" to Color(0xFF00897B),
     "C" to Color(0xFFEF6C00),
-    "D" to Color(0xFF8E24AA)
+    "D" to Color(0xFF8E24AA),
+    ORDINARY_SHIFT to Color(0xFF546E7A)
 )
 
 private fun toggled(open: Set<String>, key: String): String =
@@ -148,7 +151,7 @@ fun FoldSection(
 }
 
 /**
- * People in folds: first by shift name (A, B, C, D, then «بدون شیفت»), inside each by employment
+ * People in folds: first by shift name (A:2.1 ... D:2.2, عادی کار, then «بدون شیفت»), inside each by employment
  * (رسمی / قراردادی / پیمانکاری). A shift leader comes first in his group, followed by his members.
  * Folded by default; [forceOpen] opens everything (e.g. while searching).
  */
@@ -164,14 +167,14 @@ fun <T> ShiftEmploymentFolds(
     val open = openKeys.split(",").toSet()
     val leaderNames = remember(items) { items.map(person).filter { it.isLeader }.associate { it.id to it.name } }
     Column(verticalArrangement = Arrangement.spacedBy(CardGap)) {
-        (SHIFT_NAMES + "").forEach { shift ->
+        shiftGroups(items.map { person(it).shiftName }).forEach { shift ->
             val inShift = items.filter { person(it).shiftName == shift }
             if (inShift.isEmpty()) return@forEach
             val shiftKey = "s$shift"
             FoldSection(
-                title = if (shift.isEmpty()) "بدون شیفت" else "شیفت $shift",
+                title = shiftTitle(shift),
                 count = inShift.size,
-                accent = SHIFT_ACCENT[shift] ?: Color.Gray,
+                accent = SHIFT_ACCENT[shift.substringBefore(':')] ?: Color.Gray,
                 expanded = forceOpen || shiftKey in open,
                 big = true,
                 onToggle = { openKeys = toggled(open, shiftKey) }

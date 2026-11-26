@@ -5,7 +5,7 @@ import ir.taghvimkari.app.domain.Category
 import ir.taghvimkari.app.domain.Employment
 import ir.taghvimkari.app.domain.Pattern
 import ir.taghvimkari.app.domain.Person
-import ir.taghvimkari.app.domain.SHIFT_NAMES
+import ir.taghvimkari.app.domain.migrateShiftName
 import ir.taghvimkari.app.domain.ScheduleSegment
 import ir.taghvimkari.app.domain.WorkTypes
 import org.json.JSONArray
@@ -51,7 +51,7 @@ class LocalStore(context: Context) {
                     },
                     // Older saves have no such field: shift leaders were the evaluators.
                     canEvaluate = o.optBoolean("canEvaluate", leader),
-                    shiftName = o.optString("shiftName", "").takeIf { it in SHIFT_NAMES } ?: "",
+                    shiftName = migrateShiftName(o.optString("shiftName", ""), pattern),
                     history = decodeHistory(o.optJSONArray("history"))
                 )
             }.getOrNull()
@@ -62,12 +62,13 @@ class LocalStore(context: Context) {
             return (0 until array.length()).mapNotNull { i ->
                 runCatching {
                     val o = array.getJSONObject(i)
+                    val segPattern = Pattern.valueOf(o.getString("pattern"))
                     ScheduleSegment(
                         until = LocalDate.parse(o.getString("until")),
-                        pattern = Pattern.valueOf(o.getString("pattern")),
+                        pattern = segPattern,
                         startDate = LocalDate.parse(o.getString("startDate")),
                         startWeekday = o.optInt("startWeekday", 0).coerceIn(0, 6),
-                        shiftName = o.optString("shiftName", ""),
+                        shiftName = migrateShiftName(o.optString("shiftName", ""), segPattern),
                         leaderId = o.optString("leaderId", "").ifBlank { null }
                     )
                 }.getOrNull()

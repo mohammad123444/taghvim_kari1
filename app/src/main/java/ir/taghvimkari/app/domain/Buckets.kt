@@ -33,8 +33,8 @@ fun bucketOf(person: Person, status: DayStatus): Bucket {
     }
 }
 
-/** Shift order everywhere: A, B, C, D, then people without a shift. */
-val Person.shiftRank: Int get() = SHIFT_NAMES.indexOf(shiftName).let { if (it < 0) SHIFT_NAMES.size else it }
+/** Shift order everywhere: A:2.1, A:2.2, B:2.1 ... D:2.2, عادی کار, then people without a shift. */
+val Person.shiftRank: Int get() = shiftOrder(shiftName)
 
 /** 0 = administrative staff, 1 = a shift leader or a member of a shift leader, 2 = other operational people. */
 val Person.listGroup: Int

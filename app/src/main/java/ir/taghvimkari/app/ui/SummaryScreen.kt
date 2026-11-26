@@ -71,9 +71,9 @@ private fun monthRange(year: Int, month: Int): Pair<LocalDate, LocalDate> =
         JalaliDate(year, month, JalaliDate.monthLength(year, month)).toLocalDate()
 
 /** Summary groups, in this order: پیمانکاری، رسمی، قرارداد مستقیم. */
-private val SUMMARY_ORDER = listOf(Employment.OFFICIAL, Employment.CONTRACTUAL, Employment.CONTRACTOR)
+internal val SUMMARY_ORDER = listOf(Employment.OFFICIAL, Employment.CONTRACTUAL, Employment.CONTRACTOR)
 
-private fun summaryTitle(e: Employment): String = if (e == Employment.CONTRACTUAL) "قرارداد مستقیم" else e.title
+internal fun summaryTitle(e: Employment): String = if (e == Employment.CONTRACTUAL) "قرارداد مستقیم" else e.title
 
 private fun employmentAccent(e: Employment): Color = when (e) {
     Employment.OFFICIAL -> Purple
@@ -82,13 +82,26 @@ private fun employmentAccent(e: Employment): Color = when (e) {
 }
 
 /** One row of the table, worked out for the chosen period. */
-private class SummaryRow(
+internal class SummaryRow(
     val person: Person,
     val evaluation: Double?,
     val reward: Double,
     val cell: SummaryCell?
 ) {
     val total: Double get() = (evaluation ?: 0.0) + reward + (cell?.extra ?: 0.0) + (cell?.level ?: 0.0)
+}
+
+/** The row of one person for the period [from]..[to]: evaluation average, reward / punishment net and the typed cell. */
+internal fun summaryRowFor(viewModel: PeopleViewModel, p: Person, from: LocalDate, to: LocalDate): SummaryRow {
+    val key = periodKeyOf(from, to)
+    val evals = viewModel.evaluations.filter { it.personId == p.id && it.isComplete && it.dateTo >= from && it.date <= to }
+    val reports = viewModel.reports.filter { it.personId == p.id && it.date >= from && it.date <= to }
+    return SummaryRow(
+        person = p,
+        evaluation = if (evals.isEmpty()) null else Evaluations.average(evals),
+        reward = reports.totals().net,
+        cell = viewModel.summaryCells.firstOrNull { it.personId == p.id && it.periodKey == key }
+    )
 }
 
 /**
@@ -110,10 +123,6 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
     var picker by rememberSaveable { mutableStateOf(0) } // 0 closed, 1 from, 2 to
     var editPerson by rememberSaveable { mutableStateOf("") }
     var editColumn by rememberSaveable { mutableStateOf(0) } // 3 = ملاحظات (number with comment), 4 = رئیس
-    var sendFailed by rememberSaveable { mutableStateOf(false) }
-    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) viewModel.offerImport(uri)
-    }
     var foldedGroups by rememberSaveable { mutableStateOf("") } // employment kinds that are folded
 
     val hasPeriod = fromEpoch != NO_DATE && toEpoch != NO_DATE
@@ -124,18 +133,7 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
     val rows = (if (!hasPeriod) emptyList<Person>() else people.filter { it.active || showInactive })
         .sortedByShiftName()
         .filter { nameMatches(it.name, query) }
-        .map { p ->
-            val evals = viewModel.evaluations.filter {
-                it.personId == p.id && it.isComplete && it.dateTo >= from && it.date <= to
-            }
-            val reports = viewModel.reports.filter { it.personId == p.id && it.date >= from && it.date <= to }
-            SummaryRow(
-                person = p,
-                evaluation = if (evals.isEmpty()) null else Evaluations.average(evals),
-                reward = reports.totals().net,
-                cell = viewModel.summaryCells.firstOrNull { it.personId == p.id && it.periodKey == key }
-            )
-        }
+        .map { p -> summaryRowFor(viewModel, p, from, to) }
 
     Box(Modifier.fillMaxSize()) {
     Column(
@@ -172,7 +170,7 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
                 }
         }
 
-        // Search and send / receive stay folded until needed; the dot shows while a search is on.
+        // The search stays folded until needed; the dot shows while a search is on.
         FoldBox("جستجوی پیشرفته", active = query.isNotBlank() || showInactive) {
             OutlinedTextField(
                 value = query, onValueChange = { query = it },
@@ -183,12 +181,6 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
                 Text("نمایش غیرفعال‌ها (از واحد رفته‌ها)", Modifier.weight(1f))
                 Switch(checked = showInactive, onCheckedChange = { showInactive = it })
             }
-            ExchangeRow(
-                sendEnabled = viewModel.summaryCells.isNotEmpty(),
-                sendFailed = sendFailed,
-                onSend = { sendFailed = !DataExchange.shareSummary(context, viewModel.summaryCells) },
-                onReceive = { filePicker.launch(arrayOf("*/*")) }
-            )
         }
 
         if (rows.isEmpty()) {

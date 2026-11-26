@@ -48,7 +48,7 @@ data class Person(
     val category: Category = Category.OPERATIONAL,
     /** May evaluate other people (ارزیاب). Shift leaders are evaluators by default. */
     val canEvaluate: Boolean = false,
-    /** Shift name: "A", "B", "C" or "D" (empty for older saves). */
+    /** Shift name, one of [SHIFT_NAMES] (empty = no shift). Saves up to 2.7.1 used the plain letters "A".."D". */
     val shiftName: String = "",
     /**
      * Earlier schedules, kept when the person was moved to another shift: each one was valid for dates
@@ -67,8 +67,58 @@ data class ScheduleSegment(
     val leaderId: String?
 )
 
-/** The four shift names offered when registering a person. */
-val SHIFT_NAMES: List<String> = listOf("A", "B", "C", "D")
+/** The shift names offered when registering a person. «A:2.1» = shift A, 2 weeks of work + 1 week of rest; «A:2.2» = 2 + 2. */
+val SHIFT_NAMES: List<String> = listOf("A:2.1", "A:2.2", "B:2.1", "B:2.2", "C:2.1", "C:2.2", "D:2.2", "عادی کار")
+
+/** The shift that is not a rotating one (shown without the word «شیفت» in front). */
+const val ORDINARY_SHIFT = "عادی کار"
+
+/** «شیفت A:2.1», «عادی کار», or «بدون شیفت» for an empty name. */
+fun shiftTitle(name: String): String = when {
+    name.isBlank() -> "بدون شیفت"
+    name == ORDINARY_SHIFT -> name
+    else -> "شیفت $name"
+}
+
+/**
+ * Brings a stored shift name to the current names. Old saves have a plain letter: with a "2 weeks work + 1 week rest" pattern it
+ * becomes «X:2.1», with "2 + 2" it becomes «X:2.2» (D has only 2.2). A letter that fits neither is kept as it is, so no
+ * person loses the shift; anything else unknown is dropped.
+ */
+fun migrateShiftName(raw: String, pattern: Pattern): String {
+    val s = raw.trim()
+    if (s in SHIFT_NAMES) return s
+    if (s.length == 1 && s[0] in 'A'..'D') {
+        val suffix = when (pattern) {
+            Pattern.DAY2_REST1 -> "2.1"
+            Pattern.DAY2_REST2 -> "2.2"
+            else -> null
+        }
+        val candidate = if (suffix == null) null else "$s:$suffix"
+        return when {
+            candidate != null && candidate in SHIFT_NAMES -> candidate
+            s == "D" -> "D:2.2"
+            else -> s
+        }
+    }
+    return ""
+}
+
+/** True for a name that is not one of [SHIFT_NAMES] but is kept (an old plain letter). */
+fun isLegacyShift(name: String): Boolean = name.isNotBlank() && name !in SHIFT_NAMES
+
+/** Every shift to show as a group: the standard names, then any old plain letters still in use, then «no shift» (""). */
+fun shiftGroups(used: Collection<String>): List<String> =
+    SHIFT_NAMES + used.filter { isLegacyShift(it) }.distinct().sorted() + ""
+
+/** Position in the shift order; an old plain letter sits with the standard names of the same letter. */
+fun shiftOrder(name: String): Int {
+    val exact = SHIFT_NAMES.indexOf(name)
+    if (exact >= 0) return exact
+    if (name.isBlank()) return SHIFT_NAMES.size + 1
+    val byLetter = SHIFT_NAMES.indexOfFirst { it.startsWith(name + ":") }
+    return if (byLetter >= 0) byLetter else SHIFT_NAMES.size
+}
 
 /** Single source of truth for work-type labels (they used to be built in three places with different digits). */
 object WorkTypes {

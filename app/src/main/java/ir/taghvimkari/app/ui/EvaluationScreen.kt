@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.fillMaxSize
@@ -81,7 +82,8 @@ import ir.taghvimkari.app.domain.MIN_SEARCH_CHARS
 import ir.taghvimkari.app.domain.nameMatches
 import ir.taghvimkari.app.domain.normalizeFa
 import ir.taghvimkari.app.domain.searchTooShort
-import ir.taghvimkari.app.domain.SHIFT_NAMES
+import ir.taghvimkari.app.domain.shiftGroups
+import ir.taghvimkari.app.domain.shiftTitle
 import ir.taghvimkari.app.domain.compareNames
 import ir.taghvimkari.app.domain.displayOrder
 import ir.taghvimkari.app.domain.shiftRank
@@ -159,7 +161,7 @@ fun EvaluationScreen(viewModel: PeopleViewModel) {
         TwoBoxTabs(
             listOf(
                 "ارزیابی جدید",
-                "نتایج (${evaluations.size.toPersian()})" + if (drafts > 0) " • ناتمام ${drafts.toPersian()}" else ""
+                "مشاهده ارزیابی (${evaluations.size.toPersian()})" + if (drafts > 0) " • ناتمام ${drafts.toPersian()}" else ""
             ),
             mode
         ) { mode = it }
@@ -388,14 +390,14 @@ private fun NewEvaluationSection(
         }
         val open = openGroups.split(",").toSet()
         // Folds by shift name (A, B, C, D, none) and, inside, by employment.
-        (SHIFT_NAMES + "").forEach { shiftKey ->
+        shiftGroups(shown.map { it.shiftName }).forEach { shiftKey ->
             Employment.entries.forEach { emp ->
                 val members = shown.filter { it.shiftName == shiftKey && it.employment == emp }
                 if (members.isEmpty()) return@forEach
                 val key = "$shiftKey-${emp.name}"
                 val expanded = key in open || q.isNotBlank()
                 FoldGroup(
-                    title = (if (shiftKey.isEmpty()) "بدون شیفت" else "شیفت $shiftKey") + " • ${emp.title}",
+                    title = shiftTitle(shiftKey) + " • ${emp.title}",
                     accent = employmentColor(emp),
                     total = members.size,
                     selectedCount = members.count { it.id in selected },
@@ -430,7 +432,7 @@ private fun NewEvaluationSection(
                             Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
                                 PersonNameText(p)
                                 val status = when {
-                                    draft == null -> if (p.shiftName.isNotBlank()) "شیفت ${p.shiftName}" else ""
+                                    draft == null -> if (p.shiftName.isNotBlank()) shiftTitle(p.shiftName) else ""
                                     draft.isComplete -> "در این دوره ارزیابی شده (${formatScore(draft.finalScore)})"
                                     else -> "ناتمام: ${draft.doneCount.toPersian()} از ${EvaluationItems.count.toPersian()} آیتم"
                                 }
@@ -1109,26 +1111,32 @@ private fun MultiChips(title: String, options: List<Pair<String, String>>, selec
     val on = selected.split(",").toSet()
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(title, color = Color.Gray, style = MaterialTheme.typography.labelMedium)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            options.forEach { (key, label) ->
-                val isOn = key in on
-                Surface(
-                    color = if (isOn) Purple else Purple.copy(alpha = .10f),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable {
-                        onChange((if (isOn) on - key else on + key).filter { it.isNotEmpty() }.joinToString(","))
+        // At most 4 chips per line, so many shift names wrap onto more lines instead of being squeezed.
+        val perLine = if (options.size <= 4) options.size.coerceAtLeast(1) else 4
+        options.chunked(perLine).forEach { line ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                line.forEach { (key, label) ->
+                    val isOn = key in on
+                    Surface(
+                        color = if (isOn) Purple else Purple.copy(alpha = .10f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable {
+                            onChange((if (isOn) on - key else on + key).filter { it.isNotEmpty() }.joinToString(","))
+                        }
+                    ) {
+                        Text(
+                            label,
+                            Modifier.fillMaxWidth().padding(vertical = 9.dp),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            color = if (isOn) Color.White else Purple,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.labelLarge
+                        )
                     }
-                ) {
-                    Text(
-                        label,
-                        Modifier.fillMaxWidth().padding(vertical = 9.dp),
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        color = if (isOn) Color.White else Purple,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.labelLarge
-                    )
                 }
+                // keep every chip the same width on a shorter last line
+                repeat(perLine - line.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
@@ -1142,7 +1150,7 @@ private fun BreakdownBlock(title: String, rows: List<BreakdownRow>) {
         rows.forEach { r ->
             val color = levelColor(Evaluations.levelOf(r.average))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(r.label, Modifier.width(92.dp), color = Navy, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                Text(r.label, Modifier.width(104.dp), color = Navy, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                 Box(Modifier.weight(1f).padding(horizontal = 8.dp)) { ScoreBar(r.average / EvaluationItems.FINAL_MAX, color, 8) }
                 Text(formatScore(r.average), color = color, fontWeight = FontWeight.Bold)
                 Text(" (${r.count.toPersian()})", color = Color.Gray, style = MaterialTheme.typography.labelSmall)
@@ -1167,7 +1175,9 @@ internal fun AdvancedReportSection(people: List<Person>, evaluations: List<Evalu
     var toEpoch by rememberSaveable { mutableStateOf(NO_DATE) }
     var empText by rememberSaveable { mutableStateOf(Employment.entries.joinToString(",") { it.name }) }
     var catText by rememberSaveable { mutableStateOf(Category.entries.joinToString(",") { it.name }) }
-    var shiftText by rememberSaveable { mutableStateOf((SHIFT_NAMES + "-").joinToString(",")) }
+    // Shift chips: the standard names, any old plain letter still in use, and «بدون» (key "-").
+    val shiftKeys = remember(people) { shiftGroups(people.map { it.shiftName }).map { it.ifBlank { "-" } } }
+    var shiftText by rememberSaveable { mutableStateOf(shiftKeys.joinToString(",")) }
     var picker by rememberSaveable { mutableStateOf(0) } // 0 closed, 1 from, 2 to
 
     val fromDate = if (fromEpoch == NO_DATE) (evaluations.minOfOrNull { it.date } ?: LocalDate.now()) else LocalDate.ofEpochDay(fromEpoch)
@@ -1189,7 +1199,7 @@ internal fun AdvancedReportSection(people: List<Person>, evaluations: List<Evalu
     val average = Evaluations.average(matched)
     val level = Evaluations.levelOf(average)
     val perPerson = matched.groupBy { it.personId }
-        .map { (id, list) -> PersonAverage(byId.getValue(id), Evaluations.average(list), list.size) }
+        .mapNotNull { (id, list) -> byId[id]?.let { PersonAverage(it, Evaluations.average(list), list.size) } }
         .sortedWith(compareBy<PersonAverage> { advancedOrder[it.person.id] ?: Int.MAX_VALUE }.thenByDescending { it.average })
 
     fun rowsBy(groups: List<Pair<String, (Person) -> Boolean>>) = groups.mapNotNull { (label, test) ->
@@ -1199,15 +1209,14 @@ internal fun AdvancedReportSection(people: List<Person>, evaluations: List<Evalu
     val byEmployment = rowsBy(Employment.entries.map { emp -> emp.title to { p: Person -> p.employment == emp } })
     val byCategory = rowsBy(Category.entries.map { cat -> cat.title to { p: Person -> p.category == cat } })
     val byShift = rowsBy(
-        SHIFT_NAMES.map { s -> "شیفت $s" to { p: Person -> p.shiftName == s } } +
-            ("بدون شیفت" to { p: Person -> p.shiftName !in SHIFT_NAMES })
+        shiftGroups(people.map { it.shiftName }).map { s -> shiftTitle(s) to { p: Person -> p.shiftName == s } }
     )
 
     // ----- what to include: folded until needed, a dot shows while any choice differs from the start
     val filterOn = fromEpoch != defaultFrom || toEpoch != defaultTo ||
         emps != Employment.entries.map { it.name }.toSet() ||
         cats != Category.entries.map { it.name }.toSet() ||
-        shifts != (SHIFT_NAMES + "-").toSet()
+        shifts != shiftKeys.toSet()
     FoldBox("فیلتر گزارش", active = filterOn) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { picker = 1 }, modifier = Modifier.weight(1f)) {
@@ -1219,7 +1228,7 @@ internal fun AdvancedReportSection(people: List<Person>, evaluations: List<Evalu
             }
             MultiChips("وضعیت استخدامی", Employment.entries.map { it.name to it.title }, empText) { empText = it }
             MultiChips("نوع", Category.entries.map { it.name to it.title }, catText) { catText = it }
-            MultiChips("شیفت", SHIFT_NAMES.map { it to it } + ("-" to "بدون"), shiftText) { shiftText = it }
+            MultiChips("شیفت", shiftKeys.map { it to (if (it == "-") "بدون" else it) }, shiftText) { shiftText = it }
     }
 
     if (matched.isEmpty()) {
@@ -1257,7 +1266,7 @@ internal fun AdvancedReportSection(people: List<Person>, evaluations: List<Evalu
                         Column(Modifier.weight(1f)) {
                             StyledName(pa.person.name, pa.person.isMember)
                             Text(
-                                (if (pa.person.shiftName.isNotBlank()) "شیفت ${pa.person.shiftName} • " else "") +
+                                (if (pa.person.shiftName.isNotBlank()) shiftTitle(pa.person.shiftName) + " • " else "") +
                                     "${pa.person.employment.title} • ${pa.person.category.title} • ${pa.count.toPersian()} ارزیابی",
                                 color = Color.Gray,
                                 style = MaterialTheme.typography.labelSmall
@@ -1352,7 +1361,7 @@ private fun ScoreBar(fraction: Double, color: Color, heightDp: Int) {
     ) {
         Box(
             Modifier
-                .fillMaxWidth(fraction.toFloat().coerceIn(0f, 1f))
+                .fillMaxWidth(fraction.toFloat().let { if (it.isNaN()) 0f else it.coerceIn(0f, 1f) })
                 .fillMaxHeight()
                 .background(color)
         )

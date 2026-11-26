@@ -1,5 +1,6 @@
 package ir.taghvimkari.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -44,7 +45,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.Switch
 import ir.taghvimkari.app.data.DataExchange
+import ir.taghvimkari.app.data.PdfGroup
+import ir.taghvimkari.app.data.PdfRow
+import ir.taghvimkari.app.data.SummaryPdf
+import ir.taghvimkari.app.domain.formatNumber
+import ir.taghvimkari.app.domain.formatScore
+import ir.taghvimkari.app.domain.formatSigned
+import ir.taghvimkari.app.domain.periodText
 import ir.taghvimkari.app.domain.EvaluationEntry
 import ir.taghvimkari.app.domain.JalaliDate
 import ir.taghvimkari.app.domain.Person
@@ -84,14 +93,16 @@ fun ExchangeScreen(viewModel: PeopleViewModel) {
             listOf(
                 "نفرات (${viewModel.people.size.toPersian()})",
                 "سوابق (${viewModel.reports.size.toPersian()})",
-                "ارزیابی (${viewModel.evaluations.size.toPersian()})"
+                "ارزیابی (${viewModel.evaluations.size.toPersian()})",
+                "جمع‌بندی"
             ),
             section
         ) { section = it }
         when (section) {
             0 -> PeopleExchange(viewModel.people, context, receive)
             1 -> ReportsExchange(viewModel.people, viewModel.reports, context, receive)
-            else -> EvaluationsExchange(viewModel.people, viewModel.evaluations, context, receive)
+            2 -> EvaluationsExchange(viewModel.people, viewModel.evaluations, context, receive)
+            else -> SummaryExchange(viewModel, context)
         }
     }
 }
@@ -264,6 +275,8 @@ private fun EvaluationsExchange(
     // «ارسال گزارش ارزیابی»: either the evaluations themselves (a file) or the advanced report (a short text).
     var view by rememberSaveable { mutableStateOf(0) }
     SectionSwitch(listOf("ارسال/دریافت ارزیابی‌ها", "گزارش پیشرفته"), view) { view = it }
+    // Back from the advanced report returns to the send / receive part instead of leaving the app.
+    BackHandler(enabled = view == 1) { view = 0 }
     if (view == 1) {
         AdvancedReportSection(people = people, evaluations = evaluations)
     } else {
@@ -306,7 +319,8 @@ private fun EvaluationFileExchange(
     val rangeText = when {
         customFrom != NO_DATE && customTo != NO_DATE -> "از ${dateText(customFrom)} تا ${dateText(customTo)}"
         customFrom != NO_DATE -> "از ${dateText(customFrom)}"
-        else -> "تا ${dateText(customTo)}"
+        customTo != NO_DATE -> "تا ${dateText(customTo)}"
+        else -> "" // no date chosen: nothing to convert (NO_DATE is not a real day and would crash)
     }
 
     ExStep(1, "کدام ارزیابی‌ها ارسال شود؟") {
@@ -365,7 +379,7 @@ private fun EvaluationFileExchange(
 
 // ============================================================ shared pieces
 
-private fun dateText(epoch: Long): String = JalaliDate.from(LocalDate.ofEpochDay(epoch)).display()
+private fun dateText(epoch: Long): String = if (epoch == NO_DATE) "" else JalaliDate.from(LocalDate.ofEpochDay(epoch)).display()
 
 /** A numbered step: every section reads top to bottom (what → summary → send / receive). */
 @Composable
@@ -487,7 +501,7 @@ private fun SectionSwitch(options: List<String>, selected: Int, onSelect: (Int) 
                     color = if (on) Color.White else Purple,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
-                    style = MaterialTheme.typography.labelLarge
+                    style = MaterialTheme.typography.labelMedium
                 )
             }
         }
@@ -502,4 +516,73 @@ private fun Note(text: String, warning: Boolean = false) {
         color = if (warning) MaterialTheme.colorScheme.error else Color.Gray,
         fontWeight = if (warning) FontWeight.Bold else FontWeight.Normal
     )
+}
+
+// ============================================================ جمع‌بندی (PDF)
+
+/** «جمع‌بندی» of a chosen period, sent as a PDF table (the same table as the جمع‌بندی page). */
+@Composable
+private fun SummaryExchange(viewModel: PeopleViewModel, context: android.content.Context) {
+    var fromEpoch by rememberSaveable { mutableStateOf(NO_DATE) }
+    var toEpoch by rememberSaveable { mutableStateOf(NO_DATE) }
+    var showInactive by rememberSaveable { mutableStateOf(false) }
+    var failed by rememberSaveable { mutableStateOf(false) }
+    val ready = fromEpoch != NO_DATE && toEpoch != NO_DATE
+
+    val rows = if (!ready) emptyList() else {
+        val from = LocalDate.ofEpochDay(fromEpoch)
+        val to = LocalDate.ofEpochDay(toEpoch)
+        viewModel.people.filter { it.active || showInactive }.sortedByShiftName().map { summaryRowFor(viewModel, it, from, to) }
+    }
+
+    ExStep(1, "کدام بازه؟") {
+        DateRangeBoxes(fromEpoch, toEpoch) { f, t -> fromEpoch = f; toEpoch = t }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("نمایش غیرفعال‌ها (از واحد رفته‌ها)", Modifier.weight(1f))
+            Switch(checked = showInactive, onCheckedChange = { showInactive = it })
+        }
+    }
+    ExStep(2, "خلاصهٔ آنچه ارسال می‌شود") {
+        if (!ready) {
+            Note("تاریخ «از» و «تا» را انتخاب کنید.")
+        } else {
+            Text("جمع‌بندی ${periodText(LocalDate.ofEpochDay(fromEpoch), LocalDate.ofEpochDay(toEpoch))}", fontWeight = FontWeight.Bold)
+            BigCount(rows.size, "نفر")
+            if (rows.isEmpty()) Note("نیرویی برای این بازه پیدا نشد.")
+        }
+    }
+    ExStep(3, "خروجی PDF") {
+        Button(
+            onClick = {
+                val groups = SUMMARY_ORDER.mapNotNull { emp ->
+                    val group = rows.filter { it.person.employment == emp }
+                    if (group.isEmpty()) null else PdfGroup(
+                        title = summaryTitle(emp),
+                        rows = group.map { r ->
+                            PdfRow(
+                                name = r.person.name + (if (r.person.shiftName.isNotBlank()) " (${r.person.shiftName})" else "") +
+                                    (if (!r.person.active) " • غیرفعال" else ""),
+                                total = formatNumber(r.total),
+                                extra = r.cell?.extra?.let { formatSigned(it) } ?: "—",
+                                comment = r.cell?.comment.orEmpty(),
+                                level = r.cell?.level?.let { formatNumber(it) } ?: "—",
+                                reward = formatSigned(r.reward),
+                                evaluation = r.evaluation?.let { formatScore(it) } ?: "—"
+                            )
+                        },
+                        average = formatNumber(group.sumOf { it.total } / group.size)
+                    )
+                }
+                failed = !SummaryPdf.share(
+                    context,
+                    periodText(LocalDate.ofEpochDay(fromEpoch), LocalDate.ofEpochDay(toEpoch)),
+                    groups
+                )
+            },
+            enabled = ready && rows.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("ساخت و ارسال PDF جمع‌بندی") }
+        if (failed) Text("ساخت یا ارسال PDF انجام نشد.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        Note("خروجی جمع‌بندی فقط PDF است و برای خواندن در برنامه دریافت نمی‌شود.")
+    }
 }

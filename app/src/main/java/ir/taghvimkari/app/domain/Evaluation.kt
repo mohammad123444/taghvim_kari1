@@ -97,7 +97,8 @@ object Evaluations {
 
     fun levelOf(finalScore: Double): EvaluationLevel {
         val fraction = finalScore / EvaluationItems.FINAL_MAX
-        return EvaluationLevel.values().first { fraction + 1e-9 >= it.minFraction }
+        // never throws: a NaN or negative score is simply the lowest level
+        return EvaluationLevel.values().firstOrNull { fraction + 1e-9 >= it.minFraction } ?: EvaluationLevel.WEAK
     }
 
     /** Average final score of the complete evaluations only; drafts are ignored. */

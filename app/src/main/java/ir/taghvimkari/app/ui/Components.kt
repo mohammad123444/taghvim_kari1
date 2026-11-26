@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import ir.taghvimkari.app.domain.Employment
 import ir.taghvimkari.app.domain.JalaliDate
 import ir.taghvimkari.app.domain.Person
+import ir.taghvimkari.app.domain.shiftTitle
 import ir.taghvimkari.app.domain.DayStatus
 import ir.taghvimkari.app.domain.bucketOf
 import ir.taghvimkari.app.domain.toPersian
@@ -111,11 +112,6 @@ fun PersonCard(person: Person, status: DayStatus? = null, leaderName: String? = 
                     if (leaderName != null) {
                         Text("زیرمجموعهٔ $leaderName", style = MaterialTheme.typography.bodySmall, color = Purple)
                     }
-                    Text(
-                        person.pattern.title,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.DarkGray
-                    )
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Surface(color = employmentColor.copy(alpha = .13f), shape = RoundedCornerShape(8.dp)) {
@@ -130,7 +126,7 @@ fun PersonCard(person: Person, status: DayStatus? = null, leaderName: String? = 
                     Spacer(Modifier.height(4.dp))
                     Surface(color = Purple.copy(alpha = .10f), shape = RoundedCornerShape(8.dp)) {
                         Text(
-                            person.category.title + if (person.shiftName.isNotBlank()) " • شیفت ${person.shiftName}" else "",
+                            person.category.title + if (person.shiftName.isNotBlank()) " • " + shiftTitle(person.shiftName) else "",
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             color = Purple,
                             style = MaterialTheme.typography.labelSmall,
@@ -147,7 +143,7 @@ fun PersonCard(person: Person, status: DayStatus? = null, leaderName: String? = 
                     Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "وضعیت کاری در این تاریخ:",
+                                "وضعیت:",
                                 Modifier.weight(1f),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.DarkGray

@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import ir.taghvimkari.app.domain.JalaliDate
 import ir.taghvimkari.app.domain.Person
 import ir.taghvimkari.app.domain.SHIFT_NAMES
+import ir.taghvimkari.app.domain.shiftTitle
 import java.time.LocalDate
 
 private const val NO_LEADER = "بدون سرشیفت (الگوی فعلی ادامه می‌یابد)"
@@ -75,7 +76,7 @@ fun TransferDialog(
             }
             if (!swapMode) {
                 Text(
-                    "اکنون: " + if (person.shiftName.isBlank()) "بدون شیفت" else "شیفت ${person.shiftName}",
+                    "اکنون: " + shiftTitle(person.shiftName),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.DarkGray
                 )
