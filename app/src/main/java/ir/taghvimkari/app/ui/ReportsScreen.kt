@@ -23,6 +23,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -116,26 +119,25 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             // Two parts: «ثبت سابقه» (default) and «مشاهده سوابق» (period / person filters). The part we are in is blue.
-            val blue = ButtonDefaults.buttonColors(containerColor = Blue)
             val filterOn = mode != 0 || personFilter.isNotBlank()
             if (toolsOpen) {
-                OutlinedButton(
-                    onClick = { toolsOpen = false; showNew = true },
-                    enabled = people.isNotEmpty(),
-                    modifier = Modifier.weight(1f)
-                ) { Text("+ ثبت سابقه") }
-                Button(onClick = { toolsOpen = false }, colors = blue, modifier = Modifier.weight(1f)) {
-                    Text("مشاهده سوابق ▲")
-                    if (filterOn) Text(" ●", color = Orange)
-                }
+                ActionButton(
+                    "ثبت سابقه", { toolsOpen = false; showNew = true }, Modifier.weight(1f),
+                    icon = Icons.Default.Add, filled = false, enabled = people.isNotEmpty()
+                )
+                ActionButton(
+                    "مشاهده سوابق", { toolsOpen = false }, Modifier.weight(1f),
+                    icon = Icons.AutoMirrored.Filled.List, chevron = true, dot = filterOn, container = Blue
+                )
             } else {
-                Button(onClick = { showNew = true }, enabled = people.isNotEmpty(), colors = blue, modifier = Modifier.weight(1f)) {
-                    Text("+ ثبت سابقه")
-                }
-                OutlinedButton(onClick = { toolsOpen = true }, modifier = Modifier.weight(1f)) {
-                    Text("مشاهده سوابق ▼")
-                    if (filterOn) Text(" ●", color = Orange)
-                }
+                ActionButton(
+                    "ثبت سابقه", { showNew = true }, Modifier.weight(1f),
+                    icon = Icons.Default.Add, enabled = people.isNotEmpty(), container = Blue
+                )
+                ActionButton(
+                    "مشاهده سوابق", { toolsOpen = true }, Modifier.weight(1f),
+                    icon = Icons.AutoMirrored.Filled.List, filled = false, chevron = false, dot = filterOn
+                )
             }
         }
         if (people.isEmpty()) {

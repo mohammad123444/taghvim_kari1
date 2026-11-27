@@ -158,13 +158,20 @@ fun EvaluationScreen(viewModel: PeopleViewModel) {
             )
         }
         val drafts = evaluations.count { !it.isComplete }
-        TwoBoxTabs(
-            listOf(
-                "ارزیابی جدید",
-                "مشاهده ارزیابی (${evaluations.size.toPersian()})" + if (drafts > 0) " • ناتمام ${drafts.toPersian()}" else ""
-            ),
-            mode
-        ) { mode = it }
+        SegmentedTabs(
+            options = listOf("ارزیابی جدید", "مشاهده ارزیابی"),
+            selected = mode,
+            onSelect = { mode = it },
+            badges = listOf(null, evaluations.size.takeIf { it > 0 }?.toPersian())
+        )
+        if (drafts > 0) {
+            Text(
+                "${drafts.toPersian()} ارزیابی ناتمام",
+                color = Orange, fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+        }
         if (mode == 0) {
             NewEvaluationSection(
                 people = people,
@@ -599,31 +606,6 @@ private fun StepBox(number: Int, title: String, hint: String, enabled: Boolean, 
             }
             if (hint.isNotBlank()) Text(hint, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
             if (enabled) content()
-    }
-}
-
-/** Two equal boxes that fill the whole width (ارزیابی جدید / نتایج). */
-@Composable
-private fun TwoBoxTabs(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        options.forEachIndexed { index, label ->
-            val on = selected == index
-            Surface(
-                color = if (on) Purple else Purple.copy(alpha = .12f),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).clickable { onSelect(index) }
-            ) {
-                Text(
-                    label,
-                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 14.dp),
-                    textAlign = TextAlign.Center,
-                    color = if (on) Color.White else Purple,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    style = MaterialTheme.typography.titleSmall
-                )
-            }
-        }
     }
 }
 

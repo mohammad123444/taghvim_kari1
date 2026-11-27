@@ -13,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -58,8 +59,8 @@ fun PeopleScreen(
     val filtered = people.filter { nameMatches(it.name, query) }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(CardGap)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onAdd, modifier = Modifier.weight(1f)) { Text("+ افزودن نیرو") }
-            Button(onClick = onCompare, modifier = Modifier.weight(1f)) { Text("مقایسهٔ نیروها") }
+            ActionButton("افزودن نیرو", onAdd, Modifier.weight(1f), icon = Icons.Default.Add)
+            ActionButton("مقایسه نیروها", onCompare, Modifier.weight(1f), icon = Icons.AutoMirrored.Filled.List, filled = false)
         }
         // The name search is a plain box on the page, not inside a fold.
         OutlinedTextField(

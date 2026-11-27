@@ -311,17 +311,7 @@ fun FoldToggle(
     modifier: Modifier = Modifier,
     showLabel: Boolean = true
 ) {
-    OutlinedButton(onClick = onClick, modifier = modifier) {
-        Text(if (open) "$title ▲" else "$title ▼")
-        if (active) {
-            Spacer(Modifier.width(8.dp))
-            Box(Modifier.size(8.dp).clip(CircleShape).background(Orange))
-            if (showLabel) {
-                Spacer(Modifier.width(4.dp))
-                Text("فیلتر فعال", color = Orange, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-            }
-        }
-    }
+    ActionButton(title, onClick, modifier, filled = false, chevron = open, dot = active)
 }
 
 /** The card that opens under a [FoldToggle]: the same spacing for every folded box. */

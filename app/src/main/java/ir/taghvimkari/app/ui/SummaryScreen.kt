@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -143,30 +145,20 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
         AppCard(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("بازهٔ جمع‌بندی", fontWeight = FontWeight.Bold, color = Navy, style = MaterialTheme.typography.titleMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { picker = 1 }, modifier = Modifier.weight(1f)) {
-                        Text(dateBoxText("از", fromEpoch))
-                    }
-                    OutlinedButton(onClick = { picker = 2 }, modifier = Modifier.weight(1f)) {
-                        Text(dateBoxText("تا", toEpoch))
-                    }
+                    ActionButton(dateBoxText("از", fromEpoch), { picker = 1 }, Modifier.weight(1f), icon = Icons.Default.DateRange, filled = false)
+                    ActionButton(dateBoxText("تا", toEpoch), { picker = 2 }, Modifier.weight(1f), icon = Icons.Default.DateRange, filled = false)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(
-                        onClick = {
-                            val (a, b) = monthRange(thisMonth.year, thisMonth.month)
-                            fromEpoch = a.toEpochDay(); toEpoch = b.toEpochDay()
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("ماه جاری") }
-                    TextButton(
-                        onClick = {
-                            val y = if (thisMonth.month == 1) thisMonth.year - 1 else thisMonth.year
-                            val m = if (thisMonth.month == 1) 12 else thisMonth.month - 1
-                            val (a, b) = monthRange(y, m)
-                            fromEpoch = a.toEpochDay(); toEpoch = b.toEpochDay()
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("ماه قبل") }
+                    QuickChip("ماه جاری", {
+                        val (a, b) = monthRange(thisMonth.year, thisMonth.month)
+                        fromEpoch = a.toEpochDay(); toEpoch = b.toEpochDay()
+                    })
+                    QuickChip("ماه قبل", {
+                        val y = if (thisMonth.month == 1) thisMonth.year - 1 else thisMonth.year
+                        val m = if (thisMonth.month == 1) 12 else thisMonth.month - 1
+                        val (a, b) = monthRange(y, m)
+                        fromEpoch = a.toEpochDay(); toEpoch = b.toEpochDay()
+                    })
                 }
         }
 

@@ -394,7 +394,7 @@ private fun AppNavigation(selected: Int, onSelect: (Int) -> Unit) {
         NavigationBarItem(
             colors = navColors,
             selected = selected == PAGE_SUMMARY, onClick = { onSelect(PAGE_SUMMARY) },
-            icon = { Icon(Icons.Default.Check, contentDescription = null) }, label = { Text("جمع‌بندی", maxLines = 1) }
+            icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) }, label = { Text("جمع‌بندی", maxLines = 1) }
         )
         NavigationBarItem(
             colors = navColors,

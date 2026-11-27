@@ -57,7 +57,7 @@ fun CompareDialog(people: List<Person>, onDismiss: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "مقایسهٔ نیروها",
+                    "مقایسه نیروها",
                     Modifier.weight(1f),
                     color = Color.White,
                     style = MaterialTheme.typography.headlineSmall,
