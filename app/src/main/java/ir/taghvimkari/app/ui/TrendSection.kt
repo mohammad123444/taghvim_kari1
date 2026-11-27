@@ -103,7 +103,7 @@ private fun TrendChart(points: List<TrendPoint>) {
     val gray = Color(0xFF9E9BB5)
 
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val cell = max(60.dp, maxWidth / n)
+        val cell = maxOf(60.dp, maxWidth / n)
         Column(Modifier.horizontalScroll(rememberScrollState()).width(cell * n)) {
             // the score of each period, above its point
             Row {
