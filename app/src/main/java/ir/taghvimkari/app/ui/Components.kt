@@ -191,6 +191,8 @@ fun FormDialog(
     onDismiss: () -> Unit,
     confirmButton: @Composable () -> Unit,
     dismissButton: @Composable () -> Unit = {},
+    icon: String = "",
+    subtitle: String? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     // The dialog's own window may report no system-bar insets (edge-to-edge, targetSdk 35), which put the
@@ -213,19 +215,41 @@ fun FormDialog(
             contentAlignment = Alignment.Center
         ) {
             Surface(shape = RoundedCornerShape(28.dp), color = Color.White, shadowElevation = 6.dp) {
-                Column(Modifier.fillMaxWidth().padding(20.dp)) {
-                    Text(
-                        title,
-                        Modifier.padding(bottom = 12.dp),
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                    Column(
-                        Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) { content() }
+                Column(Modifier.fillMaxWidth()) {
+                    // coloured header, soft body, white button bar
                     Row(
-                        Modifier.fillMaxWidth().padding(top = 12.dp),
+                        Modifier.fillMaxWidth()
+                            .background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Navy, Purple)))
+                            .padding(horizontal = 18.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (icon.isNotEmpty()) {
+                            Box(
+                                Modifier.size(44.dp).clip(CircleShape).background(Color.White.copy(alpha = .18f)),
+                                contentAlignment = Alignment.Center
+                            ) { Text(icon, fontSize = 22.sp) }
+                            Spacer(Modifier.width(12.dp))
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                title,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                            if (subtitle != null) {
+                                Text(subtitle, color = Color.White.copy(alpha = .78f), style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                    Column(
+                        Modifier.weight(1f, fill = false).background(AppBackground).verticalScroll(rememberScrollState())
+                            .padding(horizontal = 14.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) { content() }
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFFE6E4F4)))
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -261,9 +285,9 @@ fun AppCard(
     Card(
         modifier = modifier.fillMaxWidth().let { if (onClick != null) it.clickable(onClick = onClick) else it },
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        shape = RoundedCornerShape(18.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = border
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        border = border ?: BorderStroke(1.dp, Color(0xFFEAE8F6))
     ) {
         Column(
             Modifier.fillMaxWidth().padding(14.dp),

@@ -416,7 +416,10 @@ private fun ReportEntryDialog(
     FormDialog(
         onDismiss = onDismiss,
         title = if (initial == null) "ثبت سابقهٔ جدید" else "ویرایش سابقه",
+        icon = "📝",
+        subtitle = if (initial == null) "تشویق یا تنبیه یک نفر را ثبت کنید" else "اطلاعات سابقه را تغییر دهید",
         content = {
+            FormSection("نفر و تاریخ", icon = "👤") {
                 PersonSearchField(
                     label = "نفر",
                     options = labelled,
@@ -427,48 +430,64 @@ private fun ReportEntryDialog(
                 if (showErrors && personId.isBlank()) {
                     Text("نفر را انتخاب کنید.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
-                OutlinedButton(onClick = { showPicker = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text("تاریخ: ${JalaliDate.from(date).display()}")
-                }
-                OutlinedTextField(
+                FormDateField("تاریخ", JalaliDate.from(date).display()) { showPicker = true }
+                FormTextField(
                     value = reporter, onValueChange = { reporter = it },
-                    label = { Text("ثبت‌کننده (چه کسی گزارش را ثبت می‌کند؟)") },
-                    singleLine = true,
-                    isError = showErrors && initial == null && reporter.isBlank(),
-                    modifier = Modifier.fillMaxWidth()
+                    label = "ثبت‌کننده (چه کسی گزارش را ثبت می‌کند؟)",
+                    isError = showErrors && initial == null && reporter.isBlank()
                 )
-                OutlinedTextField(
+            }
+            FormSection("شرح سابقه", icon = "🗒") {
+                FormTextField(
                     value = title, onValueChange = { title = it },
-                    label = { Text("سابقه (موضوع)") },
-                    minLines = 2,
-                    isError = showErrors && title.isBlank(),
-                    modifier = Modifier.fillMaxWidth()
+                    label = "سابقه (موضوع)",
+                    singleLine = false, minLines = 2,
+                    isError = showErrors && title.isBlank()
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
+                FormTextField(
+                    value = notes, onValueChange = { notes = it },
+                    label = "شرح تخلف / توضیحات",
+                    singleLine = false, minLines = 2
+                )
+            }
+            FormSection("ساعت", icon = "⏱") {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    FormTextField(
                         value = reward, onValueChange = { reward = it },
-                        label = { Text("ساعت تشویق") },
-                        singleLine = true,
+                        label = "ساعت تشویق",
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        accent = RewardGreen,
+                        tint = RewardGreen.copy(alpha = .06f),
                         modifier = Modifier.weight(1f)
                     )
-                    OutlinedTextField(
+                    FormTextField(
                         value = punishment, onValueChange = { punishment = it },
-                        label = { Text("ساعت تنبیه") },
-                        singleLine = true,
+                        label = "ساعت تنبیه",
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        accent = PunishRed,
+                        tint = PunishRed.copy(alpha = .06f),
                         modifier = Modifier.weight(1f)
                     )
                 }
-                OutlinedTextField(
-                    value = notes, onValueChange = { notes = it },
-                    label = { Text("شرح تخلف / توضیحات") },
-                    minLines = 2,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                val rewardH = parseHours(reward)
+                val punishH = parseHours(punishment)
+                if (rewardH > 0 || punishH > 0) {
+                    val net = rewardH - punishH
+                    Text(
+                        "خالص: " + when {
+                            net > 0 -> "+${formatHours(net)}"
+                            net < 0 -> "−${formatHours(-net)}"
+                            else -> "۰"
+                        } + " ساعت",
+                        color = if (net >= 0) RewardGreen else PunishRed,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
         },
         confirmButton = {
-            Button(onClick = {
+            FormSaveButton("ذخیره", onClick = {
                 if (personId.isNotBlank() && title.isNotBlank() && (initial != null || reporter.isNotBlank())) {
                     val person = labelled.firstOrNull { it.first.id == personId }?.first
                     onSave(
@@ -487,7 +506,7 @@ private fun ReportEntryDialog(
                 } else {
                     showErrors = true
                 }
-            }) { Text("ذخیره") }
+            })
         },
         dismissButton = {
             Row {

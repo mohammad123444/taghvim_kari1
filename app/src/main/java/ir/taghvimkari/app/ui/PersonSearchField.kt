@@ -92,6 +92,7 @@ fun PersonSearchField(
 
     Column(modifier.bringIntoViewRequester(requester)) {
         OutlinedTextField(
+            shape = FormFieldShape, colors = formFieldColors(),
             value = query,
             // Typing does not throw the chosen person away: the choice stays until another name is picked
             // (or the box is cleared), and leaving the box unfinished brings the chosen name back.

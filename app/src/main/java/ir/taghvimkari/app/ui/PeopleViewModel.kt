@@ -133,6 +133,28 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
         uiPrefs.textSize = size
     }
 
+    // ------------------------------------------------------------------ app lock
+    var lockEnabled: Boolean by mutableStateOf(uiPrefs.lockEnabled)
+        private set
+
+    /** True while the lock screen covers the app (at start when the lock is on, and after a while in the background). */
+    var locked: Boolean by mutableStateOf(uiPrefs.lockEnabled)
+        private set
+
+    fun updateLockEnabled(on: Boolean) {
+        lockEnabled = on
+        uiPrefs.lockEnabled = on
+        if (!on) locked = false
+    }
+
+    fun lockNow() {
+        if (lockEnabled) locked = true
+    }
+
+    fun unlocked() {
+        locked = false
+    }
+
     // ------------------------------------------------------------------ undo
     /** The last deletion, offered for undo by the snackbar. Only the latest one can be taken back. */
     var undo: UndoAction? by mutableStateOf(null)

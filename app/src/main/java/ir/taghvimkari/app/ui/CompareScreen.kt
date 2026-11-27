@@ -421,6 +421,7 @@ private fun PeoplePickerDialog(
         content = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 OutlinedTextField(
+                    shape = FormFieldShape, colors = formFieldColors(),
                     value = query, onValueChange = { query = it },
                     label = { Text("جستجو (حداقل ${MIN_SEARCH_CHARS.toPersian()} حرف)") }, singleLine = true,
                     modifier = Modifier.fillMaxWidth().keepVisibleWhenFocused()

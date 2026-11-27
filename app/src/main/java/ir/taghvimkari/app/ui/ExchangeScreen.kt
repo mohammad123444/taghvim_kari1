@@ -45,7 +45,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
+import ir.taghvimkari.app.domain.Employment
 import ir.taghvimkari.app.data.DataExchange
 import ir.taghvimkari.app.data.PdfGroup
 import ir.taghvimkari.app.data.PdfRow
@@ -551,38 +554,68 @@ private fun SummaryExchange(viewModel: PeopleViewModel, context: android.content
             if (rows.isEmpty()) Note("نیرویی برای این بازه پیدا نشد.")
         }
     }
+    var askKind by rememberSaveable { mutableStateOf(false) }
+
+    /** Makes and shares the PDF for the chosen employment kinds. */
+    fun makePdf(kinds: List<Employment>) {
+        val groups = kinds.mapNotNull { emp ->
+            val group = rows.filter { it.person.employment == emp }
+            if (group.isEmpty()) null else PdfGroup(
+                title = summaryTitle(emp),
+                rows = group.map { r ->
+                    PdfRow(
+                        name = r.person.name + (if (r.person.shiftName.isNotBlank()) " (${r.person.shiftName})" else "") +
+                            (if (!r.person.active) " • غیرفعال" else ""),
+                        total = formatNumber(r.total),
+                        extra = r.cell?.extra?.let { formatSigned(it) } ?: "—",
+                        comment = r.cell?.comment.orEmpty(),
+                        level = r.cell?.level?.let { formatNumber(it) } ?: "—",
+                        reward = formatSigned(r.reward),
+                        evaluation = r.evaluation?.let { formatScore(it) } ?: "—"
+                    )
+                },
+                average = formatNumber(group.sumOf { it.total } / group.size)
+            )
+        }
+        failed = !SummaryPdf.share(
+            context,
+            periodText(LocalDate.ofEpochDay(fromEpoch), LocalDate.ofEpochDay(toEpoch)),
+            groups
+        )
+    }
+
     ExStep(3, "خروجی PDF") {
         Button(
-            onClick = {
-                val groups = SUMMARY_ORDER.mapNotNull { emp ->
-                    val group = rows.filter { it.person.employment == emp }
-                    if (group.isEmpty()) null else PdfGroup(
-                        title = summaryTitle(emp),
-                        rows = group.map { r ->
-                            PdfRow(
-                                name = r.person.name + (if (r.person.shiftName.isNotBlank()) " (${r.person.shiftName})" else "") +
-                                    (if (!r.person.active) " • غیرفعال" else ""),
-                                total = formatNumber(r.total),
-                                extra = r.cell?.extra?.let { formatSigned(it) } ?: "—",
-                                comment = r.cell?.comment.orEmpty(),
-                                level = r.cell?.level?.let { formatNumber(it) } ?: "—",
-                                reward = formatSigned(r.reward),
-                                evaluation = r.evaluation?.let { formatScore(it) } ?: "—"
-                            )
-                        },
-                        average = formatNumber(group.sumOf { it.total } / group.size)
-                    )
-                }
-                failed = !SummaryPdf.share(
-                    context,
-                    periodText(LocalDate.ofEpochDay(fromEpoch), LocalDate.ofEpochDay(toEpoch)),
-                    groups
-                )
-            },
+            onClick = { askKind = true },
             enabled = ready && rows.isNotEmpty(),
             modifier = Modifier.fillMaxWidth()
         ) { Text("ساخت و ارسال PDF جمع‌بندی") }
         if (failed) Text("ساخت یا ارسال PDF انجام نشد.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         Note("خروجی جمع‌بندی فقط PDF است و برای خواندن در برنامه دریافت نمی‌شود.")
+    }
+
+    if (askKind) {
+        AlertDialog(
+            onDismissRequest = { askKind = false },
+            title = { Text("PDF کدام گروه؟", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SUMMARY_ORDER.forEach { emp ->
+                        val count = rows.count { it.person.employment == emp }
+                        OutlinedButton(
+                            onClick = { askKind = false; makePdf(listOf(emp)) },
+                            enabled = count > 0,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("${summaryTitle(emp)} (${count.toPersian()} نفر)") }
+                    }
+                    Button(
+                        onClick = { askKind = false; makePdf(SUMMARY_ORDER) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("همهٔ گروه‌ها در یک PDF") }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { askKind = false }) { Text("انصراف") } }
+        )
     }
 }

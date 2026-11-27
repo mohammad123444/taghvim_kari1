@@ -370,6 +370,7 @@ private fun NewEvaluationSection(
         evaluator != null
     ) {
         OutlinedTextField(
+            shape = FormFieldShape, colors = formFieldColors(),
             value = query, onValueChange = { query = it },
             label = { Text("جستجوی نام (حداقل ${MIN_SEARCH_CHARS.toPersian()} حرف)") }, singleLine = true,
             modifier = Modifier.fillMaxWidth().keepVisibleWhenFocused()
@@ -1290,6 +1291,9 @@ internal fun AdvancedReportSection(people: List<Person>, evaluations: List<Evalu
             modifier = Modifier.fillMaxWidth()
         ) { Text("ارسال گزارش") }
     }
+
+    // ----- the score of one person, period after period
+    TrendSection(people, evaluations)
 
     if (picker != 0) {
         JalaliDatePickerDialog(

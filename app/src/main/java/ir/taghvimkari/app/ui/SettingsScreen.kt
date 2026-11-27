@@ -84,6 +84,30 @@ fun SettingsScreen(viewModel: PeopleViewModel) {
             }
         }
 
+        SettingsCard("قفل برنامه") {
+            var lockError by rememberSaveable { mutableStateOf(false) }
+            FormSwitchRow(
+                "قفل با رمز / الگو / اثر انگشت گوشی",
+                "هنگام باز کردن برنامه و پس از بیش از یک دقیقه ماندن در پس‌زمینه، قفل گوشی پرسیده می‌شود. با روشن بودن قفل، تصویر برنامه در لیست برنامه‌های اخیر و اسکرین‌شات نمایش داده نمی‌شود.",
+                viewModel.lockEnabled
+            ) { on ->
+                val km = context.getSystemService(android.app.KeyguardManager::class.java)
+                if (on && (km == null || !km.isDeviceSecure)) {
+                    lockError = true
+                } else {
+                    lockError = false
+                    viewModel.updateLockEnabled(on)
+                }
+            }
+            if (lockError) {
+                Text(
+                    "ابتدا در تنظیمات گوشی یک رمز، الگو یا اثر انگشت فعال کنید.",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+
         SettingsCard("پشتیبان‌گیری") {
             val days = daysSinceBackup(LocalDate.now().toEpochDay(), viewModel.lastBackup)
             Text(

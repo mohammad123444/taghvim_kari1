@@ -104,6 +104,14 @@ fun migrateShiftName(raw: String, pattern: Pattern): String {
     return ""
 }
 
+/** The work pattern that goes with a shift name: «X:2.1» = 2 weeks day + 1 rest, «X:2.2» = 2 + 2, «عادی کار» = official days. */
+fun patternForShift(name: String): Pattern? = when {
+    name == ORDINARY_SHIFT -> Pattern.OFFICIAL_DAYS
+    name.endsWith(":2.1") -> Pattern.DAY2_REST1
+    name.endsWith(":2.2") -> Pattern.DAY2_REST2
+    else -> null
+}
+
 /** True for a name that is not one of [SHIFT_NAMES] but is kept (an old plain letter). */
 fun isLegacyShift(name: String): Boolean = name.isNotBlank() && name !in SHIFT_NAMES
 

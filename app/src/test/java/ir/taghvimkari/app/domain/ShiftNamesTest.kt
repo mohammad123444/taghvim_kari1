@@ -75,4 +75,16 @@ class ShiftNamesTest {
         assertEquals(people.map { it.shiftName }, LocalStore.decode(LocalStore.encode(people)).map { it.shiftName })
         assertFalse(people.any { isLegacyShift(it.shiftName) })
     }
+
+    @Test fun shiftNameChoosesThePattern() {
+        assertEquals(Pattern.DAY2_REST1, patternForShift("A:2.1"))
+        assertEquals(Pattern.DAY2_REST1, patternForShift("C:2.1"))
+        assertEquals(Pattern.DAY2_REST2, patternForShift("D:2.2"))
+        assertEquals(Pattern.DAY2_REST2, patternForShift("B:2.2"))
+        assertEquals(Pattern.OFFICIAL_DAYS, patternForShift(ORDINARY_SHIFT))
+        assertEquals(null, patternForShift(""))
+        assertEquals(null, patternForShift("B"))
+        // every standard name has a pattern
+        assertTrue(SHIFT_NAMES.all { patternForShift(it) != null })
+    }
 }

@@ -38,6 +38,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Scaffold
@@ -60,6 +61,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -311,9 +313,10 @@ private fun AppHeader(title: String, settingsOpen: Boolean, onSettings: () -> Un
     Row(
         Modifier
             .fillMaxWidth()
-            .background(Navy)
+            .clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp))
+            .background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Navy, Purple)))
             .statusBarsPadding()
-            .padding(start = 18.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            .padding(start = 18.dp, end = 8.dp, top = 8.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
@@ -360,28 +363,41 @@ private fun BackupReminderCard(days: Long?, failed: Boolean, onSend: () -> Unit,
 
 @Composable
 private fun AppNavigation(selected: Int, onSelect: (Int) -> Unit) {
-    NavigationBar(containerColor = Color.White) {
+    val navColors = NavigationBarItemDefaults.colors(
+        selectedIconColor = Purple,
+        selectedTextColor = Purple,
+        indicatorColor = Purple.copy(alpha = .14f),
+        unselectedIconColor = Color(0xFF8A88A3),
+        unselectedTextColor = Color(0xFF8A88A3)
+    )
+    NavigationBar(containerColor = Color.White, tonalElevation = 0.dp) {
         NavigationBarItem(
+            colors = navColors,
             selected = selected == 0, onClick = { onSelect(0) },
             icon = { Icon(Icons.Default.DateRange, contentDescription = null) }, label = { Text("تقویم", maxLines = 1) }
         )
         NavigationBarItem(
+            colors = navColors,
             selected = selected == 1, onClick = { onSelect(1) },
             icon = { Icon(Icons.Default.Person, contentDescription = null) }, label = { Text("نیروها", maxLines = 1) }
         )
         NavigationBarItem(
+            colors = navColors,
             selected = selected == 3, onClick = { onSelect(3) },
             icon = { Icon(Icons.Default.Edit, contentDescription = null) }, label = { Text("سوابق", maxLines = 1) }
         )
         NavigationBarItem(
+            colors = navColors,
             selected = selected == PAGE_EVALUATION, onClick = { onSelect(PAGE_EVALUATION) },
             icon = { Icon(Icons.Default.Star, contentDescription = null) }, label = { Text("ارزیابی", maxLines = 1) }
         )
         NavigationBarItem(
+            colors = navColors,
             selected = selected == PAGE_SUMMARY, onClick = { onSelect(PAGE_SUMMARY) },
             icon = { Icon(Icons.Default.Check, contentDescription = null) }, label = { Text("جمع‌بندی", maxLines = 1) }
         )
         NavigationBarItem(
+            colors = navColors,
             selected = selected == PAGE_EXCHANGE, onClick = { onSelect(PAGE_EXCHANGE) },
             icon = { Icon(Icons.Default.Share, contentDescription = null) }, label = { Text("گزارش", maxLines = 1) }
         )

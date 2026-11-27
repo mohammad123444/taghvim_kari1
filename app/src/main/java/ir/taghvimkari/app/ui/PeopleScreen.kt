@@ -63,6 +63,7 @@ fun PeopleScreen(
         }
         // The name search is a plain box on the page, not inside a fold.
         OutlinedTextField(
+            shape = FormFieldShape, colors = formFieldColors(),
             value = query,
             onValueChange = { query = it },
             modifier = Modifier.fillMaxWidth().keepVisibleWhenFocused(),

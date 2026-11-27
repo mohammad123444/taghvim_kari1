@@ -173,6 +173,7 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
         // The search stays folded until needed; the dot shows while a search is on.
         FoldBox("جستجوی پیشرفته", active = query.isNotBlank() || showInactive) {
             OutlinedTextField(
+                shape = FormFieldShape, colors = formFieldColors(),
                 value = query, onValueChange = { query = it },
                 label = { Text("جستجوی نام (حداقل ${MIN_SEARCH_CHARS.toPersian()} حرف)") }, singleLine = true,
                 modifier = Modifier.fillMaxWidth().keepVisibleWhenFocused()
@@ -379,6 +380,7 @@ private fun CellDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
+                    shape = FormFieldShape, colors = formFieldColors(),
                     value = n, onValueChange = { n = it },
                     label = { Text("عدد (منفی هم می‌شود)") }, singleLine = true,
                     isError = !valid,
@@ -386,6 +388,7 @@ private fun CellDialog(
                 )
                 if (comment != null) {
                     OutlinedTextField(
+                        shape = FormFieldShape, colors = formFieldColors(),
                         value = c, onValueChange = { c = it },
                         label = { Text("توضیح ملاحظات") },
                         minLines = 3,

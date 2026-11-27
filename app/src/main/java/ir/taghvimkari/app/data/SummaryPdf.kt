@@ -39,10 +39,12 @@ object SummaryPdf {
     private val HEADERS = listOf("نام", "جمع", "ملاحظات", "رئیس", "تشویق / تنبیه", "ارزشیابی")
     private val WIDTHS = listOf(175f, 55f, 70f, 55f, 95f, 85f)
 
+    private var fonts: Context? = null
+
     private fun paint(size: Float, bold: Boolean = false, color: Int = Color.BLACK) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textSize = size
         this.color = color
-        typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        typeface = fonts?.let { AppFonts.typeface(it, bold) } ?: if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
     }
 
     /** Draws [text] right-to-left inside the cell [left]..[right]; long text is made smaller, then cut. */
@@ -60,6 +62,7 @@ object SummaryPdf {
     }
 
     fun create(context: Context, periodText: String, groups: List<PdfGroup>): File {
+        fonts = context.applicationContext
         val doc = PdfDocument()
         val tableW = WIDTHS.sum()
         val tableRight = PAGE_W - MARGIN
