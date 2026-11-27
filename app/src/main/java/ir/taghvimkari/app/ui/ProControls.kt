@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Button
@@ -168,5 +169,31 @@ fun QuickChip(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) 
             color = Purple, fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelLarge
         )
+    }
+}
+
+/** A chip that can be switched on and off (several can be on together); a tick shows while it is on. */
+@Composable
+fun SelectChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    Surface(
+        color = if (selected) Purple else Purple.copy(alpha = .10f),
+        shape = RoundedCornerShape(20.dp),
+        modifier = modifier.clip(RoundedCornerShape(20.dp)).clickable(enabled = enabled, onClick = onClick)
+    ) {
+        Row(
+            Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (selected) {
+                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(
+                text,
+                color = if (selected) Color.White else if (enabled) Purple else Color.Gray,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelLarge
+            )
+        }
     }
 }

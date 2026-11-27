@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -530,6 +531,9 @@ private fun SummaryExchange(viewModel: PeopleViewModel, context: android.content
     var toEpoch by rememberSaveable { mutableStateOf(NO_DATE) }
     var showInactive by rememberSaveable { mutableStateOf(false) }
     var failed by rememberSaveable { mutableStateOf(false) }
+    // The employment kinds that go into the PDF; all three are on until the person turns some off.
+    var pickedKinds by rememberSaveable { mutableStateOf(SUMMARY_ORDER.joinToString(",") { it.name }) }
+    val chosenKinds = SUMMARY_ORDER.filter { it.name in pickedKinds.split(",") }
     val ready = fromEpoch != NO_DATE && toEpoch != NO_DATE
 
     val rows = if (!ready) emptyList() else {
@@ -537,6 +541,7 @@ private fun SummaryExchange(viewModel: PeopleViewModel, context: android.content
         val to = LocalDate.ofEpochDay(toEpoch)
         viewModel.people.filter { it.active || showInactive }.sortedByShiftName().map { summaryRowFor(viewModel, it, from, to) }
     }
+    val shownRows = rows.filter { it.person.employment in chosenKinds }
 
     ExStep(1, "کدام بازه؟") {
         DateRangeBoxes(fromEpoch, toEpoch) { f, t -> fromEpoch = f; toEpoch = t }
@@ -545,16 +550,37 @@ private fun SummaryExchange(viewModel: PeopleViewModel, context: android.content
             Switch(checked = showInactive, onCheckedChange = { showInactive = it })
         }
     }
-    ExStep(2, "خلاصهٔ آنچه ارسال می‌شود") {
+    ExStep(2, "کدام وضعیت استخدامی؟") {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SUMMARY_ORDER.forEach { emp ->
+                val count = rows.count { it.person.employment == emp }
+                val on = emp in chosenKinds
+                SelectChip(
+                    text = if (ready) "${summaryTitle(emp)} (${count.toPersian()})" else summaryTitle(emp),
+                    selected = on,
+                    onClick = {
+                        val next = if (on) chosenKinds - emp else chosenKinds + emp
+                        pickedKinds = next.joinToString(",") { it.name }
+                    }
+                )
+            }
+        }
+        if (chosenKinds.isEmpty()) Note("دست‌کم یک وضعیت استخدامی را انتخاب کنید.")
+    }
+    ExStep(3, "خلاصهٔ آنچه ارسال می‌شود") {
         if (!ready) {
             Note("تاریخ «از» و «تا» را انتخاب کنید.")
         } else {
             Text("جمع‌بندی ${periodText(LocalDate.ofEpochDay(fromEpoch), LocalDate.ofEpochDay(toEpoch))}", fontWeight = FontWeight.Bold)
-            BigCount(rows.size, "نفر")
-            if (rows.isEmpty()) Note("نیرویی برای این بازه پیدا نشد.")
+            Text(
+                if (chosenKinds.size == SUMMARY_ORDER.size) "همهٔ وضعیت‌های استخدامی"
+                else chosenKinds.joinToString("، ") { summaryTitle(it) },
+                color = Color.Gray, style = MaterialTheme.typography.bodySmall
+            )
+            BigCount(shownRows.size, "نفر")
+            if (shownRows.isEmpty()) Note("نیرویی برای این بازه و وضعیت استخدامی پیدا نشد.")
         }
     }
-    var askKind by rememberSaveable { mutableStateOf(false) }
 
     /** Makes and shares the PDF for the chosen employment kinds. */
     fun makePdf(kinds: List<Employment>) {
@@ -584,38 +610,15 @@ private fun SummaryExchange(viewModel: PeopleViewModel, context: android.content
         )
     }
 
-    ExStep(3, "خروجی PDF") {
-        Button(
-            onClick = { askKind = true },
-            enabled = ready && rows.isNotEmpty(),
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("ساخت و ارسال PDF جمع‌بندی") }
+    ExStep(4, "خروجی PDF") {
+        ActionButton(
+            "ساخت و ارسال PDF جمع‌بندی",
+            { makePdf(chosenKinds) },
+            Modifier.fillMaxWidth(),
+            icon = Icons.Default.Share,
+            enabled = ready && shownRows.isNotEmpty()
+        )
         if (failed) Text("ساخت یا ارسال PDF انجام نشد.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         Note("خروجی جمع‌بندی فقط PDF است و برای خواندن در برنامه دریافت نمی‌شود.")
-    }
-
-    if (askKind) {
-        AlertDialog(
-            onDismissRequest = { askKind = false },
-            title = { Text("PDF کدام گروه؟", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SUMMARY_ORDER.forEach { emp ->
-                        val count = rows.count { it.person.employment == emp }
-                        OutlinedButton(
-                            onClick = { askKind = false; makePdf(listOf(emp)) },
-                            enabled = count > 0,
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("${summaryTitle(emp)} (${count.toPersian()} نفر)") }
-                    }
-                    Button(
-                        onClick = { askKind = false; makePdf(SUMMARY_ORDER) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("همهٔ گروه‌ها در یک PDF") }
-                }
-            },
-            confirmButton = {},
-            dismissButton = { TextButton(onClick = { askKind = false }) { Text("انصراف") } }
-        )
     }
 }
