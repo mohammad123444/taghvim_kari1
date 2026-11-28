@@ -24,7 +24,9 @@ import ir.taghvimkari.app.domain.TextSize
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 val Navy = Color(0xFF24245B)
 val Purple = Color(0xFF6558C8)
@@ -37,6 +39,23 @@ val Orange = Color(0xFFEF8B24)
 val RewardGreen = Color(0xFF218838)
 val PunishRed = Color(0xFFD32F2F)
 
+/**
+ * The ONLY text sizes of the app. Every screen takes its size from here (directly, or through the styles of
+ * [appTypography]), so the same kind of text has the same size everywhere; «اندازهٔ نوشته» in the settings scales them all.
+ */
+object AppText {
+    /** Captions, hints, chips, small labels. */
+    val small: TextUnit = 12.sp
+    /** Normal text, buttons, text boxes, names in lists. */
+    val body: TextUnit = 15.sp
+    /** Names of leaders, titles of cards and folds. */
+    val title: TextUnit = 17.sp
+    /** Page header and dialog headers. */
+    val heading: TextUnit = 21.sp
+    /** Big numbers (counts, scores). */
+    val stat: TextUnit = 28.sp
+}
+
 /** The one gap between cards / boxes on every page. */
 val CardGap = 12.dp
 
@@ -46,7 +65,8 @@ fun TaghvimTheme(textSize: TextSize = TextSize.NORMAL, content: @Composable () -
     val base = LocalDensity.current
     val density = remember(base, textSize) { Density(base.density, base.fontScale * textSize.factor) }
     val context = LocalContext.current
-    val family = remember { appFontFamily(context) }
+    // One font for everything: Vazirmatn when its files are in the app, otherwise the phone's default font (never a mix).
+    val family = remember { appFontFamily(context) ?: FontFamily.Default }
     // The app is Persian-only: force RTL even when the phone language is English.
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl, LocalDensity provides density) {
         MaterialTheme(
@@ -77,9 +97,9 @@ fun TaghvimTheme(textSize: TextSize = TextSize.NORMAL, content: @Composable () -
                 large = RoundedCornerShape(20.dp),
                 extraLarge = RoundedCornerShape(26.dp)
             ),
-            typography = if (family == null) Typography() else Typography().withFamily(family),
+            typography = appTypography(family),
             content = {
-                if (family == null) content() else ProvideTextStyle(TextStyle(fontFamily = family)) { content() }
+                ProvideTextStyle(TextStyle(fontFamily = family, letterSpacing = 0.sp)) { content() }
             }
         )
     }
@@ -98,13 +118,25 @@ private fun appFontFamily(context: Context): FontFamily? {
     )
 }
 
-private fun Typography.withFamily(f: FontFamily) = copy(
-    displayLarge = displayLarge.copy(fontFamily = f), displayMedium = displayMedium.copy(fontFamily = f),
-    displaySmall = displaySmall.copy(fontFamily = f), headlineLarge = headlineLarge.copy(fontFamily = f),
-    headlineMedium = headlineMedium.copy(fontFamily = f), headlineSmall = headlineSmall.copy(fontFamily = f),
-    titleLarge = titleLarge.copy(fontFamily = f), titleMedium = titleMedium.copy(fontFamily = f),
-    titleSmall = titleSmall.copy(fontFamily = f), bodyLarge = bodyLarge.copy(fontFamily = f),
-    bodyMedium = bodyMedium.copy(fontFamily = f), bodySmall = bodySmall.copy(fontFamily = f),
-    labelLarge = labelLarge.copy(fontFamily = f), labelMedium = labelMedium.copy(fontFamily = f),
-    labelSmall = labelSmall.copy(fontFamily = f)
-)
+/**
+ * Every text style uses the same font and the same few sizes of [AppText], with no letter spacing (spacing between letters
+ * breaks the joined Persian letters). Styles that mean the same thing share one look.
+ */
+private fun appTypography(f: FontFamily): Typography {
+    fun style(size: TextUnit, line: TextUnit, weight: FontWeight = FontWeight.Normal) = TextStyle(
+        fontFamily = f, fontSize = size, lineHeight = line, fontWeight = weight, letterSpacing = 0.sp
+    )
+    val small = style(AppText.small, 18.sp)
+    val body = style(AppText.body, 23.sp)
+    val bodyMedium = style(AppText.body, 23.sp, FontWeight.Medium)
+    val title = style(AppText.title, 25.sp, FontWeight.Medium)
+    val heading = style(AppText.heading, 29.sp, FontWeight.SemiBold)
+    val stat = style(AppText.stat, 36.sp, FontWeight.SemiBold)
+    return Typography(
+        displayLarge = stat, displayMedium = stat, displaySmall = stat,
+        headlineLarge = heading, headlineMedium = heading, headlineSmall = heading,
+        titleLarge = heading, titleMedium = title, titleSmall = bodyMedium,
+        bodyLarge = body, bodyMedium = body, bodySmall = small,
+        labelLarge = bodyMedium, labelMedium = small, labelSmall = small
+    )
+}

@@ -14,6 +14,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
+import android.widget.Toast
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -35,6 +39,10 @@ import ir.taghvimkari.app.domain.Person
 import ir.taghvimkari.app.domain.SHIFT_NAMES
 import ir.taghvimkari.app.domain.ShiftEngine
 import ir.taghvimkari.app.domain.WorkTypes
+import ir.taghvimkari.app.domain.normalizePersonnel
+import ir.taghvimkari.app.domain.personnelConflicts
+import ir.taghvimkari.app.domain.splitNameAndNumber
+import ir.taghvimkari.app.domain.toPersianDigits
 import ir.taghvimkari.app.domain.patternForShift
 import ir.taghvimkari.app.domain.toPersian
 import java.time.LocalDate
@@ -48,6 +56,8 @@ import java.util.UUID
 @Composable
 fun AddPersonDialog(
     initial: Person? = null,
+    /** Everybody already registered: a personnel number that one of them has cannot be used again. */
+    people: List<Person> = emptyList(),
     /** Number of existing members when editing a leader. */
     memberCount: Int = 0,
     /** Names of the existing members when editing a leader; always listed under the leader. */
@@ -61,6 +71,7 @@ fun AddPersonDialog(
 ) {
     val today = remember { LocalDate.now() }
     var name by rememberSaveable { mutableStateOf(initial?.name ?: "") }
+    var personnelNumber by rememberSaveable { mutableStateOf(initial?.personnelNumber ?: "") }
     var employment by remember { mutableStateOf(initial?.employment ?: Employment.OFFICIAL) }
     var category by remember { mutableStateOf(initial?.category ?: Category.OPERATIONAL) }
     var applyToMembers by rememberSaveable { mutableStateOf(true) }
@@ -75,7 +86,23 @@ fun AddPersonDialog(
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
 
     val startDate = LocalDate.ofEpochDay(startEpochDay)
-    val memberNames = membersText.lines().map { it.trim() }.filter { it.isNotEmpty() }
+    // Each line of the members box: a name, and optionally a personnel number as its last word («علی رضایی ۱۲۳۴۵»).
+    val memberEntries = membersText.lines().map { it.trim() }.filter { it.isNotEmpty() }.map { splitNameAndNumber(it) }
+        .filter { it.first.isNotBlank() }
+    val memberNames = memberEntries.map { it.first }
+
+    // A personnel number must be unique: not used by anybody registered, nor twice in this form.
+    val candidates = listOf(name.trim() to personnelNumber) + (if (isLeader) memberEntries else emptyList())
+    val conflicts = remember(people, initial?.id, name, personnelNumber, membersText, isLeader) {
+        personnelConflicts(people, candidates, initial?.id)
+    }
+    fun conflictText(c: ir.taghvimkari.app.domain.PersonnelConflict): String {
+        val who = if (c.index == 0) "" else "«${candidates[c.index].first}»: "
+        return "$who" + "شماره پرسنلی ${c.number.toPersianDigits()} قبلاً برای «${c.owner}» ثبت شده است."
+    }
+    val headConflict = conflicts.firstOrNull { it.index == 0 }
+    val memberConflicts = conflicts.filter { it.index > 0 }
+    val context = LocalContext.current
 
     FormDialog(
         onDismiss = onDismiss,
@@ -89,6 +116,15 @@ fun AddPersonDialog(
                     label = if (isLeader) "نام سرشیفت" else "نام و نام خانوادگی",
                     isError = showErrors && name.isBlank()
                 )
+                FormTextField(
+                    value = personnelNumber, onValueChange = { personnelNumber = it },
+                    label = "شماره پرسنلی (اختیاری، یکتا)",
+                    isError = headConflict != null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+                if (headConflict != null) {
+                    Text(conflictText(headConflict), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
                 FormChoiceChips("وضعیت استخدامی", Employment.entries.map { it.title }, employment.title) { v ->
                     employment = Employment.entries.first { it.title == v }
                 }
@@ -121,8 +157,17 @@ fun AddPersonDialog(
                     FormTextField(
                         value = membersText, onValueChange = { membersText = it },
                         label = "افراد زیرمجموعه (هر نفر در یک خط)",
-                        singleLine = false, minLines = 3
+                        singleLine = false, minLines = 3,
+                        isError = memberConflicts.isNotEmpty()
                     )
+                    Text(
+                        "برای ثبت شماره پرسنلی، آن را آخر همان خط بنویسید؛ مثلاً: علی رضایی ۱۲۳۴۵",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                    memberConflicts.forEach { c ->
+                        Text(conflictText(c), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
                     if (memberNames.isNotEmpty()) {
                         Text(
                             "${memberNames.size.toPersian()} نفر با همین شرایط ثبت می‌شوند.",
@@ -153,7 +198,11 @@ fun AddPersonDialog(
         },
         confirmButton = {
             FormSaveButton("ذخیره", onClick = {
-                if (name.isNotBlank()) {
+                if (name.isNotBlank() && conflicts.isNotEmpty()) {
+                    // a personnel number that is already taken: no registration, an error instead
+                    showErrors = true
+                    Toast.makeText(context, conflictText(conflicts.first()), Toast.LENGTH_LONG).show()
+                } else if (name.isNotBlank()) {
                     // Keep the stored weekday when editing without changing the date, so the schedule does not shift.
                     val weekday = if (initial != null && startDate == initial.startDate) {
                         initial.startWeekday
@@ -173,13 +222,16 @@ fun AddPersonDialog(
                         leaderId = initial?.leaderId,
                         category = category,
                         canEvaluate = initial?.canEvaluate ?: false,
-                        shiftName = shiftName
+                        shiftName = shiftName,
+                        history = initial?.history ?: emptyList(),
+                        personnelNumber = normalizePersonnel(personnelNumber)
                     )
                     val members = if (isLeader) {
-                        memberNames.map { n ->
+                        memberEntries.map { (n, number) ->
                             Person(
                                 id = UUID.randomUUID().toString(),
                                 name = n,
+                                personnelNumber = number,
                                 workType = WorkTypes.default,
                                 employment = employment,
                                 pattern = pattern,

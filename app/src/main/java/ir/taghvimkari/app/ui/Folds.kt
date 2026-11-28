@@ -52,14 +52,14 @@ val Person.isMember: Boolean get() = leaderId != null && !isLeader
 @Composable
 fun PersonNameText(person: Person, modifier: Modifier = Modifier) {
     if (person.isMember) {
-        Text(person.name, modifier, color = MemberNameColor, fontSize = 14.sp)
+        Text(person.name, modifier, color = MemberNameColor, fontSize = AppText.body)
     } else {
         Text(
             if (person.isLeader) "${person.name} • سرشیفت" else person.name,
             modifier,
             fontWeight = FontWeight.Bold,
             color = LeaderNameColor,
-            fontSize = 18.sp
+            fontSize = AppText.title
         )
     }
 }
@@ -73,9 +73,9 @@ fun StyledName(
     maxLines: Int = Int.MAX_VALUE
 ) {
     if (member) {
-        Text(name, modifier, color = MemberNameColor, fontSize = 13.sp, maxLines = maxLines)
+        Text(name, modifier, color = MemberNameColor, fontSize = AppText.body, maxLines = maxLines)
     } else {
-        Text(name, modifier, color = LeaderNameColor, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = maxLines)
+        Text(name, modifier, color = LeaderNameColor, fontWeight = FontWeight.Bold, fontSize = AppText.title, maxLines = maxLines)
     }
 }
 

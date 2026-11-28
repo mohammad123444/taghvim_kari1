@@ -233,13 +233,13 @@ private fun DayCell(
                 day.toPersian(),
                 color = textColor,
                 fontWeight = FontWeight.Bold,
-                fontSize = 18.sp
+                fontSize = AppText.title
             )
             if (badge != null) {
                 Text(
                     badge,
                     color = if (isSelected) Color(0xFFE6E3FF) else Purple,
-                    fontSize = 11.sp,
+                    fontSize = AppText.small,
                     fontWeight = FontWeight.Bold
                 )
             }

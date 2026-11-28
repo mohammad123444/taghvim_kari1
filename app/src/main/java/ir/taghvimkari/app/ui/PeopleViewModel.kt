@@ -40,6 +40,8 @@ import ir.taghvimkari.app.domain.TextSize
 import ir.taghvimkari.app.domain.WorkingDraft
 import ir.taghvimkari.app.domain.backupReminderDue
 import ir.taghvimkari.app.domain.restoreAt
+import ir.taghvimkari.app.domain.withFinal
+import ir.taghvimkari.app.domain.withoutFinal
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -378,6 +380,41 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             reports + entry
         }
+        reportStore.save(reports)
+    }
+
+    /** Adds several new reports at once (one reward / punishment for many people). */
+    fun saveReports(entries: List<ReportEntry>) {
+        if (entries.isEmpty()) return
+        entries.lastOrNull { it.reporter.isNotBlank() }?.let { lastReporter = it.reporter }
+        val known = reports.map { it.id }.toHashSet()
+        reports = reports + entries.filter { it.id !in known }
+        reportStore.save(reports)
+    }
+
+    /** The superior who gave the last final opinion; pre-filled in the next one. */
+    var lastFinalBy: String by mutableStateOf("")
+        private set
+
+    /**
+     * The final opinion (نظر نهایی) of a superior on one report: [reward] / [punishment] are the hours that count from now
+     * on. A number he leaves as the suggestion stays the suggestion.
+     */
+    fun setFinalOpinion(id: String, by: String, reward: Double, punishment: Double) {
+        val old = reports.firstOrNull { it.id == id } ?: return
+        if (by.isNotBlank()) lastFinalBy = by.trim()
+        replaceReport(old.withFinal(by, reward, punishment))
+    }
+
+    /** Takes a final opinion back: the reporter's suggested hours count again. */
+    fun clearFinalOpinion(id: String) {
+        val old = reports.firstOrNull { it.id == id } ?: return
+        replaceReport(old.withoutFinal())
+    }
+
+    /** Replaces the report with the same id without touching [lastReporter] (a superior's opinion is not a new report). */
+    private fun replaceReport(entry: ReportEntry) {
+        reports = reports.map { if (it.id == entry.id) entry else it }
         reportStore.save(reports)
     }
 

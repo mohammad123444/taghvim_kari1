@@ -37,6 +37,7 @@ import ir.taghvimkari.app.domain.Person
 import ir.taghvimkari.app.domain.ShiftEngine
 import ir.taghvimkari.app.domain.MIN_SEARCH_CHARS
 import ir.taghvimkari.app.domain.nameMatches
+import ir.taghvimkari.app.domain.normalizePersonnel
 import ir.taghvimkari.app.domain.searchTooShort
 import ir.taghvimkari.app.domain.toPersian
 import java.time.LocalDate
@@ -56,7 +57,11 @@ fun PeopleScreen(
     val leaderNames = people.filter { it.isLeader }.associate { it.id to it.name }
     // Names are searched only after three characters; the folds open by themselves while searching.
     val searching = query.isNotBlank()
-    val filtered = people.filter { nameMatches(it.name, query) }
+    val numberQuery = normalizePersonnel(query)
+    val filtered = people.filter {
+        nameMatches(it.name, query) ||
+            (numberQuery.length >= MIN_SEARCH_CHARS && normalizePersonnel(it.personnelNumber).contains(numberQuery))
+    }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(CardGap)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ActionButton("افزودن نیرو", onAdd, Modifier.weight(1f), icon = Icons.Default.Add)
@@ -68,7 +73,7 @@ fun PeopleScreen(
             value = query,
             onValueChange = { query = it },
             modifier = Modifier.fillMaxWidth().keepVisibleWhenFocused(),
-            label = { Text("جستجو بر اساس نام (حداقل ${MIN_SEARCH_CHARS.toPersian()} حرف)") },
+            label = { Text("جستجو بر اساس نام یا شماره پرسنلی (حداقل ${MIN_SEARCH_CHARS.toPersian()} حرف)") },
             singleLine = true
         )
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

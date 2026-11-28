@@ -231,7 +231,7 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
                                             (if (!r.person.active) " • غیرفعال" else ""),
                                         if (r.person.isMember) MemberNameColor else LeaderNameColor,
                                         bold = !r.person.isMember, align = TextAlign.Start,
-                                        fontSize = if (r.person.isMember) 12.sp else 15.sp
+                                        fontSize = if (r.person.isMember) AppText.small else AppText.body
                                     )
                                     SummaryCellBox(COL_W, formatNumber(r.total), Navy, bold = true, bg = Navy.copy(alpha = .08f))
                                     SummaryCellBox(
@@ -357,7 +357,7 @@ private fun SummaryCellBox(
     bg: Color = Color.Transparent,
     align: TextAlign = TextAlign.Center,
     marker: Boolean = false,
-    fontSize: androidx.compose.ui.unit.TextUnit = 13.sp,
+    fontSize: androidx.compose.ui.unit.TextUnit = AppText.body,
     onClick: (() -> Unit)? = null
 ) {
     Box(

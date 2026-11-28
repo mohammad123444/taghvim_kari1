@@ -36,6 +36,9 @@ class ReportStore(context: Context) {
                         put("punishmentHours", r.punishmentHours)
                         put("notes", r.notes)
                         put("reporter", r.reporter)
+                        r.suggestedReward?.let { put("suggestedReward", it) }
+                        r.suggestedPunishment?.let { put("suggestedPunishment", it) }
+                        put("finalBy", r.finalBy)
                     }
                 )
             }
@@ -53,7 +56,10 @@ class ReportStore(context: Context) {
                     rewardHours = o.optDouble("rewardHours", 0.0),
                     punishmentHours = o.optDouble("punishmentHours", 0.0),
                     notes = o.optString("notes", ""),
-                    reporter = o.optString("reporter", "")
+                    reporter = o.optString("reporter", ""),
+                    suggestedReward = if (o.has("suggestedReward")) o.optDouble("suggestedReward") else null,
+                    suggestedPunishment = if (o.has("suggestedPunishment")) o.optDouble("suggestedPunishment") else null,
+                    finalBy = o.optString("finalBy", "")
                 )
             }.getOrNull()
         }

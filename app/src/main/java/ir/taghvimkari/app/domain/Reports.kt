@@ -15,7 +15,53 @@ data class ReportEntry(
     val punishmentHours: Double,
     val notes: String,
     /** Who wrote the report (ثبت‌کننده). Together with the person and the date it identifies a report. */
-    val reporter: String = ""
+    val reporter: String = "",
+    /**
+     * The reporter's own suggestion, kept ONLY when a superior changed it (نظر نهایی). [rewardHours] / [punishmentHours]
+     * always hold the hours that count (the criterion): the suggestion until a superior decides differently, then his
+     * hours. null = the suggestion was not changed (so [rewardHours] / [punishmentHours] still are the suggestion).
+     */
+    val suggestedReward: Double? = null,
+    val suggestedPunishment: Double? = null,
+    /** The superior who gave the final opinion; blank = nobody has decided yet, the suggestion counts. */
+    val finalBy: String = ""
+) {
+    /** A superior has given his final opinion (even if he agreed with the suggestion). */
+    val hasFinal: Boolean get() = finalBy.isNotBlank()
+
+    /** The superior changed the suggested hours. */
+    val changedByFinal: Boolean get() = suggestedReward != null || suggestedPunishment != null
+
+    /** The reporter's reward hours as suggested (before any final opinion). */
+    val originalReward: Double get() = suggestedReward ?: rewardHours
+
+    /** The reporter's punishment hours as suggested (before any final opinion). */
+    val originalPunishment: Double get() = suggestedPunishment ?: punishmentHours
+}
+
+/**
+ * The final opinion (نظر نهایی) of a superior: [reward] / [punishment] become the hours that count. The reporter's
+ * suggestion is kept beside them when it differs; when the superior leaves a number as it was, the suggestion stays.
+ */
+fun ReportEntry.withFinal(by: String, reward: Double, punishment: Double): ReportEntry {
+    val oldReward = originalReward
+    val oldPunishment = originalPunishment
+    return copy(
+        rewardHours = reward,
+        punishmentHours = punishment,
+        suggestedReward = if (reward != oldReward) oldReward else null,
+        suggestedPunishment = if (punishment != oldPunishment) oldPunishment else null,
+        finalBy = by.trim()
+    )
+}
+
+/** Takes the final opinion back: the reporter's suggestion counts again. */
+fun ReportEntry.withoutFinal(): ReportEntry = copy(
+    rewardHours = originalReward,
+    punishmentHours = originalPunishment,
+    suggestedReward = null,
+    suggestedPunishment = null,
+    finalBy = ""
 )
 
 data class ReportTotals(val count: Int, val reward: Double, val punishment: Double) {
@@ -67,6 +113,15 @@ fun buildReportText(
             if (e.reporter.isNotBlank()) parts.add("ثبت‌کننده: ${e.reporter.trim()}")
             if (e.rewardHours > 0) parts.add("تشویق ${formatHours(e.rewardHours)} ساعت")
             if (e.punishmentHours > 0) parts.add("تنبیه ${formatHours(e.punishmentHours)} ساعت")
+            if (e.hasFinal) {
+                parts.add(
+                    "نظر نهایی: ${e.finalBy.trim()}" + if (e.changedByFinal) {
+                        " (پیشنهاد اولیه: تشویق ${formatHours(e.originalReward)} • تنبیه ${formatHours(e.originalPunishment)})"
+                    } else {
+                        " (مطابق پیشنهاد)"
+                    }
+                )
+            }
             if (e.notes.isNotBlank()) parts.add(e.notes.trim())
             appendLine("- " + parts.joinToString(" | "))
         }
@@ -86,7 +141,12 @@ data class ReportPeriod(val label: String, val from: LocalDate?, val to: LocalDa
 data class ReportMerge(
     val result: List<ReportEntry>,
     val added: List<ReportEntry>,
-    val duplicates: List<ReportEntry>
+    val duplicates: List<ReportEntry>,
+    /**
+     * Existing reports that had no final opinion yet and got the one a received copy carries (نظر نهایی). Only the
+     * final opinion is taken over: nothing else of the existing report changes. They are NOT in [duplicates].
+     */
+    val decided: List<ReportEntry> = emptyList()
 )
 
 /**
@@ -102,10 +162,26 @@ fun mergeReports(current: List<ReportEntry>, incoming: List<ReportEntry>, people
     val out = current.toMutableList()
     val added = mutableListOf<ReportEntry>()
     val duplicates = mutableListOf<ReportEntry>()
+    val decided = mutableListOf<ReportEntry>()
     for (raw in incoming) {
         val e = raw.copy(personId = who.resolve(raw.personId, raw.personName))
         if (!seen.add(keyOf(e))) {
-            duplicates.add(raw)
+            // The same report that came back from a superior: take over his final opinion if this phone has none yet.
+            val at = out.indexOfFirst { keyOf(it) == keyOf(e) }
+            val mine = out.getOrNull(at)
+            if (mine != null && !mine.hasFinal && e.hasFinal) {
+                val updated = mine.copy(
+                    rewardHours = e.rewardHours,
+                    punishmentHours = e.punishmentHours,
+                    suggestedReward = e.suggestedReward,
+                    suggestedPunishment = e.suggestedPunishment,
+                    finalBy = e.finalBy
+                )
+                out[at] = updated
+                decided.add(updated)
+            } else {
+                duplicates.add(raw)
+            }
             continue
         }
         // A different report may carry an id that is already used here: it gets its own id.
@@ -114,5 +190,5 @@ fun mergeReports(current: List<ReportEntry>, incoming: List<ReportEntry>, people
         out.add(saved)
         added.add(saved)
     }
-    return ReportMerge(out, added, duplicates)
+    return ReportMerge(out, added, duplicates, decided)
 }

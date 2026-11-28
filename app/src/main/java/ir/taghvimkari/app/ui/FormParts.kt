@@ -80,7 +80,7 @@ fun FormSection(
                     Box(
                         Modifier.size(30.dp).clip(CircleShape).background(accent.copy(alpha = .12f)),
                         contentAlignment = Alignment.Center
-                    ) { Text(icon, fontSize = 15.sp) }
+                    ) { Text(icon, fontSize = AppText.body) }
                 } else {
                     Box(Modifier.width(4.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(accent))
                 }

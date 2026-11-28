@@ -599,7 +599,7 @@ private fun StepBox(number: Int, title: String, hint: String, enabled: Boolean, 
                     Modifier.size(28.dp).clip(CircleShape).background(if (enabled) Purple else Color(0xFFBDBBD6)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(number.toPersian(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(number.toPersian(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = AppText.body)
                 }
                 Text(
                     title,
@@ -1330,7 +1330,7 @@ private fun ScoreBadge(score: Double, big: Boolean) {
             formatScore(score),
             color = color,
             fontWeight = FontWeight.Bold,
-            fontSize = if (big) 44.sp else 28.sp
+            fontSize = AppText.stat
         )
         Text(
             "  از ${EvaluationItems.FINAL_MAX.toPersian()}",
@@ -1424,7 +1424,7 @@ private fun EvaluationDetailDialog(
                                     Modifier.size(26.dp).clip(CircleShape).background(scoreColor(score)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(score.toPersian(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text(score.toPersian(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = AppText.body)
                                 }
                             }
                         }

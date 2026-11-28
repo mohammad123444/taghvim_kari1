@@ -6,6 +6,7 @@ import ir.taghvimkari.app.domain.Employment
 import ir.taghvimkari.app.domain.Pattern
 import ir.taghvimkari.app.domain.Person
 import ir.taghvimkari.app.domain.migrateShiftName
+import ir.taghvimkari.app.domain.normalizePersonnel
 import ir.taghvimkari.app.domain.ScheduleSegment
 import ir.taghvimkari.app.domain.WorkTypes
 import org.json.JSONArray
@@ -52,7 +53,8 @@ class LocalStore(context: Context) {
                     // Older saves have no such field: shift leaders were the evaluators.
                     canEvaluate = o.optBoolean("canEvaluate", leader),
                     shiftName = migrateShiftName(o.optString("shiftName", ""), pattern),
-                    history = decodeHistory(o.optJSONArray("history"))
+                    history = decodeHistory(o.optJSONArray("history")),
+                    personnelNumber = normalizePersonnel(o.optString("personnelNumber", ""))
                 )
             }.getOrNull()
         }
@@ -109,6 +111,7 @@ class LocalStore(context: Context) {
                         put("canEvaluate", p.canEvaluate)
                         put("shiftName", p.shiftName)
                         put("history", encodeHistory(p.history))
+                        put("personnelNumber", p.personnelNumber)
                     }
                 )
             }

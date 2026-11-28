@@ -53,6 +53,7 @@ fun searchTooShort(query: String): Boolean {
  */
 fun dedupePeople(list: List<Person>): Pair<List<Person>, List<String>> {
     val seenIds = HashSet<String>()
+    val seenNumbers = HashMap<String, String>()
     val keyToId = HashMap<String, String>()
     val remap = HashMap<String, String>()
     val kept = ArrayList<Person>()
@@ -66,8 +67,17 @@ fun dedupePeople(list: List<Person>): Pair<List<Person>, List<String>> {
             remap[p.id] = sameKeyId
             dropped.add(p.name)
         } else {
-            keyToId[key] = p.id
-            kept.add(p)
+            val number = normalizePersonnel(p.personnelNumber)
+            val sameNumberId = if (number.isEmpty()) null else seenNumbers[number]
+            if (sameNumberId != null) {
+                // the same personnel number is a second registration of the same person
+                remap[p.id] = sameNumberId
+                dropped.add("${p.name} (شماره پرسنلی ${number.toPersianDigits()})")
+            } else {
+                if (number.isNotEmpty()) seenNumbers[number] = p.id
+                keyToId[key] = p.id
+                kept.add(p)
+            }
         }
     }
     val fixed = kept.map { p -> p.leaderId?.let { id -> remap[id] }?.let { p.copy(leaderId = it) } ?: p }

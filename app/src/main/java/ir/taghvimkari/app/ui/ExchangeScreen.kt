@@ -394,7 +394,7 @@ private fun ExStep(number: Int, title: String, content: @Composable ColumnScope.
     AppCard(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(28.dp).clip(CircleShape).background(Purple), contentAlignment = Alignment.Center) {
-                Text(number.toPersian(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(number.toPersian(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = AppText.body)
             }
             Text(
                 title,
@@ -467,7 +467,7 @@ private fun DateRangeBoxes(from: Long, to: Long, onChange: (Long, Long) -> Unit)
 @Composable
 private fun BigCount(count: Int, unit: String, of: String = "") {
     Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(count.toPersian(), color = Purple, fontWeight = FontWeight.Bold, fontSize = 32.sp)
+        Text(count.toPersian(), color = Purple, fontWeight = FontWeight.Bold, fontSize = AppText.stat)
         Text(unit, Modifier.padding(bottom = 6.dp), color = Purple, fontWeight = FontWeight.Bold)
         if (of.isNotBlank()) Text(of, Modifier.padding(bottom = 6.dp), color = Color.Gray, style = MaterialTheme.typography.bodySmall)
     }

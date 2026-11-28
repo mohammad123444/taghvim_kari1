@@ -54,7 +54,9 @@ data class Person(
      * Earlier schedules, kept when the person was moved to another shift: each one was valid for dates
      * BEFORE [ScheduleSegment.until]. The current fields above are valid from the latest move on.
      */
-    val history: List<ScheduleSegment> = emptyList()
+    val history: List<ScheduleSegment> = emptyList(),
+    /** شماره پرسنلی: optional, but when it is filled in it is unique among all people (see [normalizePersonnel]). */
+    val personnelNumber: String = ""
 )
 
 /** The schedule a person had until (not including) [until]; used so a transfer does not rewrite the past. */

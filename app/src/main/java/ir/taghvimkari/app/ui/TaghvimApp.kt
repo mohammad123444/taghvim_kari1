@@ -159,6 +159,7 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
 
     if (showAdd) {
         AddPersonDialog(
+            people = viewModel.people,
             onDismiss = { showAdd = false },
             onSave = { head, members, _ -> viewModel.add(head, members); showAdd = false }
         )
@@ -167,6 +168,7 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
     editing?.let { person ->
         AddPersonDialog(
             initial = person,
+            people = viewModel.people,
             memberCount = viewModel.people.count { it.leaderId == person.id },
             existingMembers = viewModel.people.filter { it.leaderId == person.id }.sortedByShiftName().map { it.name },
             onTransfer = { editing = null; transferringId = person.id },
@@ -255,6 +257,9 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
                 "${e.personName} — ${JalaliDate.from(e.date).display()}$by"
             },
             rule = "سابقه‌ای تکراری است که ثبت‌کننده، نفر و تاریخ آن با یک سابقهٔ ثبت‌شده یکی باشد.",
+            decidedLines = merge.decided.map { e ->
+                "${e.personName} — ${JalaliDate.from(e.date).display()} — نظر نهایی: ${e.finalBy.trim()}"
+            },
             onConfirm = viewModel::confirmReportImport,
             onCancel = viewModel::cancelReportImport
         )
@@ -429,8 +434,11 @@ private fun ImportReviewDialog(
     duplicateLines: List<String>,
     rule: String,
     onConfirm: () -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    /** Already registered reports that only receive the final opinion (نظر نهایی) of a superior. */
+    decidedLines: List<String> = emptyList()
 ) {
+    val actionable = newCount + decidedLines.size
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text(title, fontWeight = FontWeight.Bold) },
@@ -442,6 +450,14 @@ private fun ImportReviewDialog(
                     else "هیچ $what جدیدی در این فایل نیست.",
                     fontWeight = FontWeight.Bold
                 )
+                if (decidedLines.isNotEmpty()) {
+                    Text(
+                        "${decidedLines.size.toPersian()} $what از قبل ثبت شده و «نظر نهایی» مافوق را دارد؛ فقط همین نظر نهایی روی $what موجود اعمال می‌شود:",
+                        color = Purple,
+                        fontWeight = FontWeight.Bold
+                    )
+                    decidedLines.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
+                }
                 if (duplicateLines.isNotEmpty()) {
                     Text(
                         "هشدار: ${duplicateLines.size.toPersian()} $what تکراری است و ثبت نمی‌شود:",
@@ -454,12 +470,17 @@ private fun ImportReviewDialog(
             }
         },
         confirmButton = {
-            if (newCount > 0) {
-                TextButton(onClick = onConfirm) { Text("ثبت ${newCount.toPersian()} $what جدید", fontWeight = FontWeight.Bold) }
+            if (actionable > 0) {
+                TextButton(onClick = onConfirm) {
+                    Text(
+                        if (newCount > 0) "ثبت ${newCount.toPersian()} $what جدید" else "اعمال نظر نهایی",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             } else {
                 TextButton(onClick = onCancel) { Text("باشه", fontWeight = FontWeight.Bold) }
             }
         },
-        dismissButton = if (newCount > 0) { { TextButton(onClick = onCancel) { Text("انصراف") } } } else null
+        dismissButton = if (actionable > 0) { { TextButton(onClick = onCancel) { Text("انصراف") } } } else null
     )
 }

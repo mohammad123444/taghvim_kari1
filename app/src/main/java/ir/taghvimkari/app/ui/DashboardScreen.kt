@@ -259,7 +259,7 @@ private fun CategoryBox(
                         style = MaterialTheme.typography.labelLarge
                     )
                 }
-                Text(if (expanded) "▴" else "▾", color = Navy, fontSize = 22.sp)
+                Text(if (expanded) "▴" else "▾", color = Navy, fontSize = AppText.title)
             }
             if (expanded) {
                 Column(
@@ -295,7 +295,7 @@ private fun BucketSection(bucket: Bucket, items: List<Pair<Person, DayStatus>>, 
             ) {
                 Text(bucket.title, Modifier.weight(1f), fontWeight = FontWeight.Bold, color = color)
                 Text("${items.size.toPersian()} نفر", color = color, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
-                Text(if (expanded) "  ▴" else "  ▾", color = color, fontSize = 18.sp)
+                Text(if (expanded) "  ▴" else "  ▾", color = color, fontSize = AppText.title)
             }
             if (expanded) {
                 Column(

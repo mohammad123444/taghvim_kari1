@@ -65,6 +65,7 @@ import ir.taghvimkari.app.domain.shiftTitle
 import ir.taghvimkari.app.domain.DayStatus
 import ir.taghvimkari.app.domain.bucketOf
 import ir.taghvimkari.app.domain.toPersian
+import ir.taghvimkari.app.domain.toPersianDigits
 
 @Composable
 fun EmptyMessage(text: String) {
@@ -106,6 +107,13 @@ fun PersonCard(person: Person, status: DayStatus? = null, leaderName: String? = 
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     PersonNameText(person)
+                    if (person.personnelNumber.isNotBlank()) {
+                        Text(
+                            "شماره پرسنلی: ${person.personnelNumber.toPersianDigits()}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
                     if (!person.active) {
                         Text("غیرفعال (از واحد رفته)", style = MaterialTheme.typography.labelMedium, color = Color(0xFFB3261E), fontWeight = FontWeight.Bold)
                     }
@@ -225,7 +233,7 @@ fun FormDialog(
                             Box(
                                 Modifier.size(44.dp).clip(CircleShape).background(Color.White.copy(alpha = .18f)),
                                 contentAlignment = Alignment.Center
-                            ) { Text(icon, fontSize = 22.sp) }
+                            ) { Text(icon, fontSize = AppText.heading) }
                             Spacer(Modifier.width(12.dp))
                         }
                         Column(Modifier.weight(1f)) {

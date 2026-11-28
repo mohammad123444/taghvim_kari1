@@ -244,12 +244,12 @@ fun CompareScreen(people: List<Person>) {
                     }
                     Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
                         Spacer(Modifier.width(nameWidth))
-                        Text(JalaliDate.from(from).display(), Modifier.weight(1f), fontSize = 11.sp, color = Color.DarkGray)
-                        Text("${days.toPersian()} روز", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Navy)
+                        Text(JalaliDate.from(from).display(), Modifier.weight(1f), fontSize = AppText.small, color = Color.DarkGray)
+                        Text("${days.toPersian()} روز", fontSize = AppText.small, fontWeight = FontWeight.Bold, color = Navy)
                         Text(
                             JalaliDate.from(to).display(),
                             Modifier.weight(1f),
-                            fontSize = 11.sp,
+                            fontSize = AppText.small,
                             color = Color.DarkGray,
                             textAlign = TextAlign.End
                         )
@@ -263,7 +263,7 @@ fun CompareScreen(people: List<Person>) {
                                         JalaliDate.from(from.plusDays(i.toLong())).day.toPersian(),
                                         Modifier.weight(1f),
                                         textAlign = TextAlign.Center,
-                                        fontSize = 10.sp,
+                                        fontSize = AppText.small,
                                         color = Color.Gray
                                     )
                                 }
@@ -275,7 +275,7 @@ fun CompareScreen(people: List<Person>) {
                             Column(Modifier.width(nameWidth)) {
                                 Text(
                                     if (row.person.isLeader) "★ ${row.person.name}" else row.person.name,
-                                    fontSize = if (row.person.isMember) 11.sp else 13.sp,
+                                    fontSize = if (row.person.isMember) AppText.small else AppText.body,
                                     fontWeight = if (row.person.isMember) FontWeight.Normal else FontWeight.Bold,
                                     color = if (row.person.isMember) MemberNameColor else LeaderNameColor,
                                     maxLines = 1,
@@ -283,7 +283,7 @@ fun CompareScreen(people: List<Person>) {
                                 )
                                 Text(
                                     "${row.workDays.toPersian()} کار • ${row.restDays.toPersian()} استراحت",
-                                    fontSize = 9.sp,
+                                    fontSize = AppText.small,
                                     color = Color.Gray,
                                     maxLines = 1
                                 )
@@ -409,11 +409,11 @@ private fun TogetherTile(label: String, days: Int, color: Color, modifier: Modif
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(days.toPersian(), color = tint, fontWeight = FontWeight.Bold, fontSize = 30.sp)
-            Text("روز", color = tint, fontSize = 13.sp, modifier = Modifier.padding(bottom = 5.dp))
+            Text(days.toPersian(), color = tint, fontWeight = FontWeight.Bold, fontSize = AppText.stat)
+            Text("روز", color = tint, fontSize = AppText.body, modifier = Modifier.padding(bottom = 5.dp))
         }
-        Text(label, color = tint, fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.Center)
-        Text(if (muted) "موردی نیست" else "مشاهدهٔ بازه‌ها ‹", color = tint.copy(alpha = .75f), fontSize = 11.sp)
+        Text(label, color = tint, fontWeight = FontWeight.Bold, fontSize = AppText.small, textAlign = TextAlign.Center)
+        Text(if (muted) "موردی نیست" else "مشاهدهٔ بازه‌ها ‹", color = tint.copy(alpha = .75f), fontSize = AppText.small)
     }
 }
 
@@ -470,7 +470,7 @@ private fun TogetherDialog(title: String, ranges: List<DayRange>, color: Color, 
                                         Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
                                         color = color,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp
+                                        fontSize = AppText.small
                                     )
                                 }
                             }
@@ -487,7 +487,7 @@ private fun TogetherDialog(title: String, ranges: List<DayRange>, color: Color, 
 private fun Legend(color: Color, label: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(12.dp).clip(RoundedCornerShape(3.dp)).background(color))
-        Text("  $label", fontSize = 11.sp, color = Color.DarkGray)
+        Text("  $label", fontSize = AppText.small, color = Color.DarkGray)
     }
 }
 
