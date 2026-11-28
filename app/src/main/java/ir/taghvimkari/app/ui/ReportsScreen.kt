@@ -372,8 +372,34 @@ private fun ReportCard(entry: ReportEntry, name: String, member: Boolean, kind: 
             if (entry.notes.isNotBlank()) {
                 Text(entry.notes, color = Color(0xFF6B6B88), fontSize = 12.sp, fontWeight = FontWeight.Normal)
             }
-            if (entry.reporter.isNotBlank()) {
-                Text("ثبت‌کننده: ${entry.reporter}", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+            // Who gave the reward / punishment: always shown, in plain sight (old records without a name say so).
+            val hasReward = entry.rewardHours > 0
+            val hasPunishment = entry.punishmentHours > 0
+            val role = when {
+                hasReward && !hasPunishment -> "تشویق‌کننده"
+                hasPunishment && !hasReward -> "تنبیه‌کننده"
+                else -> "ثبت‌کننده (تشویق / تنبیه)"
+            }
+            val roleColor = when {
+                hasReward && !hasPunishment -> RewardGreen
+                hasPunishment && !hasReward -> PunishRed
+                else -> Navy
+            }
+            val who = entry.reporter.trim()
+            Surface(color = roleColor.copy(alpha = .09f), shape = RoundedCornerShape(10.dp)) {
+                Row(
+                    Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text("👤 $role:", color = roleColor, fontSize = 12.sp)
+                    Text(
+                        if (who.isBlank()) "نامشخص" else who,
+                        color = if (who.isBlank()) Color.Gray else roleColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
             }
     }
 }
@@ -435,7 +461,7 @@ private fun ReportEntryDialog(
                 FormDateField("تاریخ", JalaliDate.from(date).display()) { showPicker = true }
                 FormTextField(
                     value = reporter, onValueChange = { reporter = it },
-                    label = "ثبت‌کننده (چه کسی گزارش را ثبت می‌کند؟)",
+                    label = "چه کسی تشویق / تنبیه کرده است؟ (نام)",
                     isError = showErrors && initial == null && reporter.isBlank()
                 )
             }
