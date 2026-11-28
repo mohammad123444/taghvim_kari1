@@ -3,6 +3,9 @@ package ir.taghvimkari.app.domain
 /** A backup (sending the files) is asked for once a month. */
 const val BACKUP_INTERVAL_DAYS = 30L
 
+/** The automatic backup (when a folder is chosen) is made once a week. */
+const val AUTO_BACKUP_DAYS = 7L
+
 /** Closing the reminder hides it for this many days. */
 const val BACKUP_SNOOZE_DAYS = 3L
 

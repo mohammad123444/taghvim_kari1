@@ -22,15 +22,15 @@ class ReportsTest {
 
     @Test fun hoursAreFormattedWithPersianDigits() {
         assertEquals("۲", formatHours(2.0))
-        assertEquals("۱٫۵", formatHours(1.5))
+        assertEquals("۲", formatHours(1.5))
         assertEquals("۰", formatHours(0.0))
     }
 
     @Test fun hoursAreParsedFromAnyDigitsAndSeparator() {
         assertEquals(2.0, parseHours("۲"), 0.0)
-        assertEquals(1.5, parseHours("1.5"), 0.0)
-        assertEquals(1.5, parseHours("۱٫۵"), 0.0)
-        assertEquals(1.5, parseHours("1,5"), 0.0)
+        assertEquals(2.0, parseHours("1.5"), 0.0)
+        assertEquals(2.0, parseHours("۱٫۵"), 0.0)
+        assertEquals(2.0, parseHours("1.5"), 0.0)
         assertEquals(0.0, parseHours(""), 0.0)
         assertEquals(0.0, parseHours("abc"), 0.0)
         assertEquals(0.0, parseHours("-3"), 0.0)

@@ -27,6 +27,21 @@ jobs:
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
+      # With the 3 secrets (KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS) the APK is signed with your private key.
+      # Without them the old key inside the project is used, so nothing breaks before the secrets are added.
+      - name: Use the private signing key (if the secrets exist)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          SECRET_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          SECRET_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$SECRET_PASSWORD" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "KEYSTORE_PASSWORD=$SECRET_PASSWORD" >> "$GITHUB_ENV"
+            echo "KEY_ALIAS=${SECRET_ALIAS:-taghvim}" >> "$GITHUB_ENV"
+          fi
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:

@@ -72,9 +72,9 @@ class SummaryBackupTest {
     }
 
     @Test fun numbersAreFormattedAndParsed() {
-        assertEquals("−۲٫۵", formatNumber(-2.5))
-        assertEquals("+۴", formatSigned(4.0))
-        assertEquals(-2.5, parseNumber("−۲٫۵")!!, 0.0)
+        assertEquals("\u202A−۳\u202C", formatNumber(-2.5))
+        assertEquals("\u202A+۴\u202C", formatSigned(4.0))
+        assertEquals(-3.0, parseNumber("−۲٫۵")!!, 0.0)
         assertNull(parseNumber(""))
         assertNull(parseNumber("abc"))
     }

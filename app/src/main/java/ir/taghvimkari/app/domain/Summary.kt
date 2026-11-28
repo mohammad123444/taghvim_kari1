@@ -16,27 +16,31 @@ data class SummaryCell(
     val isEmpty: Boolean get() = extra == null && comment.isBlank() && level == null
 }
 
-/** 4 -> "۴", -2.5 -> "−۲٫۵" (at most two decimals). */
+/** Every number in the app is a whole number: 4 -> "۴", 38.4 -> "۳۸", -2.5 -> "−۳" (halves go away from zero). */
+fun roundWhole(value: Double): Long =
+    if (value < 0) -Math.round(-value) else Math.round(value)
+
+/** Left-to-right embedding: inside Persian text the sign then stays on the left of the digits, as "−۳". */
+private const val LTR_START = "\u202A"
+private const val LTR_END = "\u202C"
+
 fun formatNumber(value: Double): String {
-    val rounded = Math.round(value * 100) / 100.0
-    val text = if (rounded == Math.floor(rounded)) {
-        rounded.toLong().toString()
-    } else {
-        String.format(Locale.ROOT, "%.2f", rounded).trimEnd('0').trimEnd('.')
-    }
-    return text.toPersianDigits().replace('.', '٫').replace('-', '−')
+    val whole = roundWhole(value)
+    val digits = Math.abs(whole).toString().toPersianDigits()
+    return if (whole < 0) "$LTR_START−$digits$LTR_END" else digits
 }
 
-/** Like [formatNumber] but a positive number gets a «+». */
-fun formatSigned(value: Double): String = if (value > 0.0) "+" + formatNumber(value) else formatNumber(value)
+/** Like [formatNumber] but a positive number gets a «+» (on the left of the digits too). */
+fun formatSigned(value: Double): String =
+    if (roundWhole(value) > 0) "$LTR_START+${formatNumber(value)}$LTR_END" else formatNumber(value)
 
-/** Reads a number typed with Persian or Latin digits, with an optional minus; blank or invalid gives null. */
+/** Reads a number typed with Persian or Latin digits, with an optional minus; it is rounded to a whole number. Blank or invalid gives null. */
 fun parseNumber(text: String): Double? {
     val clean = text.trim().toLatinDigits()
         .replace('٫', '.').replace('،', '.').replace(',', '.').replace('/', '.')
         .replace('−', '-').replace('–', '-')
     if (clean.isBlank()) return null
-    return clean.toDoubleOrNull()
+    return clean.toDoubleOrNull()?.let { roundWhole(it).toDouble() }
 }
 
 data class SummaryMerge(val result: List<SummaryCell>, val added: Int, val updated: Int, val unchanged: Int)

@@ -16,7 +16,6 @@ data class PdfRow(
     val name: String,
     val total: String,
     val extra: String,
-    val comment: String,
     val level: String,
     val reward: String,
     val evaluation: String
@@ -31,7 +30,6 @@ object SummaryPdf {
     private const val PAGE_H = 842
     private const val MARGIN = 30f
     private const val ROW_H = 24f
-    private const val COMMENT_H = 14f
     private const val NAVY = 0xFF1F2A5A.toInt()
     private const val PURPLE = 0xFF5B3FA6.toInt()
 
@@ -57,7 +55,9 @@ object SummaryPdf {
         while (p.measureText(shown) > room && shown.length > 1) shown = shown.dropLast(1)
         val width = p.measureText(shown)
         val x = if (center) left + (right - left - width) / 2 else right - 3f - width
-        canvas.drawTextRun(shown, 0, shown.length, 0, shown.length, x, baseline, true, p)
+// drawText runs the full bidi algorithm (Persian words stay right-to-left, digits and Latin stay left-to-right);
+        // the leading RLM makes the whole cell right-to-left even when it starts with a digit or a bracket.
+        canvas.drawText("\u200F" + shown, x, baseline, p)
         p.textSize = startSize
     }
 
@@ -110,8 +110,7 @@ object SummaryPdf {
             if (y + ROW_H * 3 > PAGE_H - MARGIN) newPage()
             drawHeader(g.title, g.rows.size)
             g.rows.forEach { r ->
-                val needed = ROW_H + if (r.comment.isNotBlank()) COMMENT_H else 0f
-                if (y + needed > PAGE_H - MARGIN - 20f) {
+                if (y + ROW_H > PAGE_H - MARGIN - 20f) {
                     newPage()
                     drawHeader(g.title, g.rows.size)
                 }
@@ -128,10 +127,6 @@ object SummaryPdf {
                     right -= WIDTHS[i]
                 }
                 y += ROW_H
-                if (r.comment.isNotBlank()) {
-                    cell(c, "ملاحظات: ${r.comment}", MARGIN, tableRight - 4f, y + 8f, paint(8.5f, false, Color.GRAY), center = false)
-                    y += COMMENT_H
-                }
                 c.drawLine(MARGIN, y, tableRight, y, line)
             }
             // average of the «جمع» column for this group

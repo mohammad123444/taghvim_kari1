@@ -31,7 +31,9 @@ import ir.taghvimkari.app.domain.EvaluationItems
 import ir.taghvimkari.app.domain.Evaluations
 import ir.taghvimkari.app.domain.JalaliDate
 import ir.taghvimkari.app.domain.Person
+import ir.taghvimkari.app.domain.formatNumber
 import ir.taghvimkari.app.domain.formatScore
+import ir.taghvimkari.app.domain.roundWhole
 import ir.taghvimkari.app.domain.formatSigned
 import ir.taghvimkari.app.domain.periodText
 import ir.taghvimkari.app.domain.toPersianDigits
@@ -58,9 +60,14 @@ internal fun TrendSection(people: List<Person>, evaluations: List<EvaluationEntr
     if (withData.isEmpty()) return
 
     var personId by rememberSaveable { mutableStateOf("") }
+    // false = compare with everybody, true = only with people of the same employment kind (رسمی / قرارداد مستقیم / پیمانکاری)
+    var sameGroup by rememberSaveable { mutableStateOf(false) }
     val labelled = remember(withData) { uniqueLabels(withData) }
-    val points = remember(personId, complete) {
-        if (personId.isBlank()) emptyList() else
+    val person = withData.firstOrNull { it.id == personId }
+    val points = remember(personId, sameGroup, complete, people) {
+        if (personId.isBlank()) emptyList() else {
+            val groupIds = people.filter { p -> p.employment == person?.employment }.map { it.id }.toSet()
+            val pool = if (!sameGroup) complete else complete.filter { it.personId in groupIds || it.personId == personId }
             complete.filter { it.personId == personId }
                 .groupBy { it.date to it.dateTo }
                 .map { (period, list) ->
@@ -68,28 +75,36 @@ internal fun TrendSection(people: List<Person>, evaluations: List<EvaluationEntr
                         from = period.first,
                         to = period.second,
                         value = Evaluations.average(list),
-                        everyone = Evaluations.average(complete.filter { it.date == period.first && it.dateTo == period.second }),
+                        everyone = Evaluations.average(pool.filter { it.date == period.first && it.dateTo == period.second }),
                         count = list.size
                     )
                 }
                 .sortedBy { it.from.toEpochDay() }
+        }
     }
 
     AppCard(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("روند نمرهٔ هر نفر", fontWeight = FontWeight.Bold, color = Navy, style = MaterialTheme.typography.titleMedium)
         PersonSearchField(label = "نفر", options = labelled, selectedId = personId, onSelect = { personId = it })
+        if (personId.isNotBlank()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("مقایسه با:", color = Color.Gray, style = MaterialTheme.typography.labelLarge)
+                SelectChip("همهٔ نفرات", selected = !sameGroup, onClick = { sameGroup = false })
+                SelectChip(person?.employment?.title?.let { "هم‌گروه ($it)" } ?: "هم‌گروه", selected = sameGroup, onClick = { sameGroup = true })
+            }
+        }
         when {
             personId.isBlank() ->
                 Text("نفر را انتخاب کنید تا نمرهٔ او در دوره‌های مختلف دیده شود.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
             points.isEmpty() ->
                 Text("برای این نفر ارزیابی کاملی ثبت نشده است.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-            else -> TrendChart(points)
+            else -> TrendChart(points, if (sameGroup) "میانگین هم‌گروه" else "میانگین همه")
         }
     }
 }
 
 @Composable
-private fun TrendChart(points: List<TrendPoint>) {
+private fun TrendChart(points: List<TrendPoint>, groupLabel: String) {
     val n = points.size
     val all = points.map { it.value } + points.map { it.everyone }
     val maxScore = EvaluationItems.FINAL_MAX.toDouble()
@@ -151,7 +166,7 @@ private fun TrendChart(points: List<TrendPoint>) {
 
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
         Text("● نمرهٔ این نفر", color = line, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-        Text("┄ میانگین همه", color = gray, style = MaterialTheme.typography.labelMedium)
+        Text("┄ $groupLabel", color = gray, style = MaterialTheme.typography.labelMedium)
     }
     if (n >= 2) {
         val change = points.last().value - points.first().value
@@ -159,6 +174,20 @@ private fun TrendChart(points: List<TrendPoint>) {
         Text(
             "تغییر از اولین تا آخرین دوره: ${formatSigned(change)}  •  نسبت به دورهٔ قبل: ${formatSigned(last)}",
             color = if (last >= 0) RewardGreen else PunishRed,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+    run {
+        val gap = points.last().value - points.last().everyone
+        val verdict = when {
+            roundWhole(gap) > 0L -> "${formatNumber(gap)} امتیاز بالاتر از $groupLabel"
+            roundWhole(gap) < 0L -> "${formatNumber(-gap)} امتیاز پایین‌تر از $groupLabel"
+            else -> "برابر با $groupLabel"
+        }
+        Text(
+            "در آخرین دوره: $verdict",
+            color = if (gap >= 0) RewardGreen else PunishRed,
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.bodySmall
         )

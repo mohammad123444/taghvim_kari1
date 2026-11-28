@@ -52,6 +52,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        viewModel.autoBackupIfDue()
         // back from more than a minute in the background: lock again
         if (stoppedAt != 0L && SystemClock.elapsedRealtime() - stoppedAt > LOCK_AFTER_MS) viewModel.lockNow()
     }

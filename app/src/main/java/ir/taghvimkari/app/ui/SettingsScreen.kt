@@ -1,5 +1,7 @@
 package ir.taghvimkari.app.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -123,6 +125,45 @@ fun SettingsScreen(viewModel: PeopleViewModel) {
             ) { Text("ارسال") }
             if (backupFailed) {
                 Text("ارسال انجام نشد.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
+        SettingsCard("پشتیبان خودکار هفتگی") {
+            val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+                if (uri != null) {
+                    runCatching {
+                        context.contentResolver.takePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                        )
+                    }
+                    viewModel.setAutoBackupFolder(uri)
+                    viewModel.autoBackupIfDue(force = true)
+                }
+            }
+            val folder = viewModel.autoBackupFolder
+            if (folder == null) {
+                Text("پوشه‌ای انتخاب کنید تا هر هفته، با باز کردن برنامه، یک فایل پشتیبان در آن ذخیره شود. چون بیرون از برنامه ذخیره می‌شود، با حذف برنامه یا خراب شدن گوشی هم می‌ماند.")
+                Button(onClick = { folderPicker.launch(null) }, modifier = Modifier.fillMaxWidth()) { Text("انتخاب پوشه") }
+            } else {
+                Text("پوشه: " + (Uri.parse(folder).lastPathSegment?.substringAfter(':').orEmpty().ifBlank { "انتخاب‌شده" }))
+                val lastAuto = viewModel.lastAutoBackupDay
+                Text(
+                    if (lastAuto == null) "هنوز پشتیبان خودکاری ساخته نشده است."
+                    else "آخرین پشتیبان خودکار: ${JalaliDate.from(LocalDate.ofEpochDay(lastAuto)).display()}"
+                )
+                if (viewModel.autoBackupFailed) {
+                    Text(
+                        "نوشتن در پوشه انجام نشد. پوشه را دوباره انتخاب کنید.",
+                        color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { viewModel.autoBackupIfDue(force = true) }, modifier = Modifier.weight(1f)) { Text("همین الان") }
+                    OutlinedButton(onClick = { folderPicker.launch(null) }, modifier = Modifier.weight(1f)) { Text("تغییر پوشه") }
+                    OutlinedButton(onClick = { viewModel.setAutoBackupFolder(null) }, modifier = Modifier.weight(1f)) { Text("خاموش") }
+                }
+                Text("سه فایل آخر نگه داشته می‌شود.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
             }
         }
 

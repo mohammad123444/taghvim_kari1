@@ -5,7 +5,7 @@ plugins {
 }
 
 // Values injected by GitHub Actions (all optional for local builds).
-val ciVersionName: String = System.getenv("APP_VERSION_NAME") ?: "2.7.2"
+val ciVersionName: String = System.getenv("APP_VERSION_NAME") ?: "2.7.9"
 // Derived from the version (1.4.0 -> 10400) so debug and release builds always compare correctly,
 // otherwise Android refuses the update as a "downgrade".
 val ciVersionCode: Int = ciVersionName.split(".").map { it.toIntOrNull() ?: 0 }.let {
@@ -36,11 +36,21 @@ android {
     signingConfigs {
         // One fixed key for debug AND release builds: Android only installs an update over an
         // installed app when both APKs are signed with the same key.
+        // A private key from GitHub Secrets (KEYSTORE_FILE / KEYSTORE_PASSWORD / KEY_ALIAS, set by the workflows)
+        // is used when present; otherwise the old key that is stored inside the project.
         create("shared") {
-            storeFile = file("signing/taghvim.jks")
-            storePassword = "taghvim-shared"
-            keyAlias = "taghvim"
-            keyPassword = "taghvim-shared"
+            val secretKey = System.getenv("KEYSTORE_FILE")?.takeIf { it.isNotBlank() }?.let { file(it) }
+            if (secretKey != null && secretKey.exists()) {
+                storeFile = secretKey
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")?.takeIf { it.isNotBlank() } ?: "taghvim"
+                keyPassword = System.getenv("KEYSTORE_PASSWORD")
+            } else {
+                storeFile = file("signing/taghvim.jks")
+                storePassword = "taghvim-shared"
+                keyAlias = "taghvim"
+                keyPassword = "taghvim-shared"
+            }
         }
     }
 

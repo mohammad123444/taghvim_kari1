@@ -161,14 +161,16 @@ object DataExchange {
         }
     }
 
+    /** The encrypted wrapper that every sent or saved file uses. */
+    fun seal(json: String): String = JSONObject().put("app", APP).put("enc", 1).put("data", Secure.encrypt(json)).toString()
+
     /** Writes [json] to a file and opens Android's share sheet (Telegram, WhatsApp, e-mail, Bluetooth ...). */
     private fun shareJson(context: Context, fileName: String, json: String, chooserTitle: String): Boolean = runCatching {
         val dir = File(context.cacheDir, "shared").apply { mkdirs() }
         dir.listFiles()?.forEach { it.delete() }
         val file = File(dir, fileName)
         // The file on disk (and what is sent) is encrypted; only this app can read it.
-        val sealed = JSONObject().put("app", APP).put("enc", 1).put("data", Secure.encrypt(json)).toString()
-        file.writeText(sealed, Charsets.UTF_8)
+        file.writeText(seal(json), Charsets.UTF_8)
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
         val send = Intent(Intent.ACTION_SEND)
             .setType(MIME)

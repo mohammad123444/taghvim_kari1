@@ -54,7 +54,10 @@ import ir.taghvimkari.app.data.DataExchange
 import ir.taghvimkari.app.data.PdfGroup
 import ir.taghvimkari.app.data.PdfRow
 import ir.taghvimkari.app.data.SummaryPdf
+import ir.taghvimkari.app.data.ShareBytes
+import ir.taghvimkari.app.data.Xlsx
 import ir.taghvimkari.app.domain.formatNumber
+import ir.taghvimkari.app.domain.roundWhole
 import ir.taghvimkari.app.domain.formatScore
 import ir.taghvimkari.app.domain.formatSigned
 import ir.taghvimkari.app.domain.periodText
@@ -590,11 +593,9 @@ private fun SummaryExchange(viewModel: PeopleViewModel, context: android.content
                 title = summaryTitle(emp),
                 rows = group.map { r ->
                     PdfRow(
-                        name = r.person.name + (if (r.person.shiftName.isNotBlank()) " (${r.person.shiftName})" else "") +
-                            (if (!r.person.active) " • غیرفعال" else ""),
+                        name = r.person.name + (if (!r.person.active) " • غیرفعال" else ""),
                         total = formatNumber(r.total),
                         extra = r.cell?.extra?.let { formatSigned(it) } ?: "—",
-                        comment = r.cell?.comment.orEmpty(),
                         level = r.cell?.level?.let { formatNumber(it) } ?: "—",
                         reward = formatSigned(r.reward),
                         evaluation = r.evaluation?.let { formatScore(it) } ?: "—"
@@ -610,7 +611,32 @@ private fun SummaryExchange(viewModel: PeopleViewModel, context: android.content
         )
     }
 
-    ExStep(4, "خروجی PDF") {
+    /** The same table as an Excel file: one sheet, one row per person, real numbers (not text). */
+    fun makeExcel() {
+        val header = listOf("وضعیت استخدامی", "نام", "جمع", "ملاحظات", "رئیس", "تشویق / تنبیه", "ارزشیابی")
+        val body = chosenKinds.flatMap { emp ->
+            shownRows.filter { it.person.employment == emp }.map { r ->
+                listOf<Any?>(
+                    summaryTitle(emp),
+                    r.person.name + (if (!r.person.active) " • غیرفعال" else ""),
+                    roundWhole(r.total),
+                    r.cell?.extra?.let { roundWhole(it) },
+                    r.cell?.level?.let { roundWhole(it) },
+                    roundWhole(r.reward),
+                    r.evaluation?.let { roundWhole(it) }
+                )
+            }
+        }
+        failed = !ShareBytes.share(
+            context,
+            "taghvim-summary-${LocalDate.now()}.xlsx",
+            Xlsx.MIME,
+            Xlsx.build("جمع‌بندی", listOf(header) + body, listOf(18, 28, 10, 12, 10, 16, 12)),
+            "ارسال جمع‌بندی (Excel)"
+        )
+    }
+
+    ExStep(4, "خروجی PDF یا Excel") {
         ActionButton(
             "ساخت و ارسال PDF جمع‌بندی",
             { makePdf(chosenKinds) },
@@ -618,7 +644,15 @@ private fun SummaryExchange(viewModel: PeopleViewModel, context: android.content
             icon = Icons.Default.Share,
             enabled = ready && shownRows.isNotEmpty()
         )
-        if (failed) Text("ساخت یا ارسال PDF انجام نشد.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-        Note("خروجی جمع‌بندی فقط PDF است و برای خواندن در برنامه دریافت نمی‌شود.")
+        ActionButton(
+            "ساخت و ارسال Excel جمع‌بندی",
+            { makeExcel() },
+            Modifier.fillMaxWidth(),
+            icon = Icons.Default.Share,
+            filled = false,
+            enabled = ready && shownRows.isNotEmpty()
+        )
+        if (failed) Text("ساخت یا ارسال فایل انجام نشد.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        Note("خروجی جمع‌بندی PDF یا Excel است و برای خواندن در برنامه دریافت نمی‌شود.")
     }
 }

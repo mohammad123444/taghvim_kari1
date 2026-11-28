@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
@@ -77,6 +78,7 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
     // Settings is opened from the gear in the header; this remembers where to return to.
     var pageBeforeSettings by rememberSaveable { mutableStateOf(0) }
     var showAdd by rememberSaveable { mutableStateOf(false) }
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Person?>(null) }
     var showCompare by rememberSaveable { mutableStateOf(false) }
     var transferringId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -108,6 +110,7 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
             AppHeader(
                 title = PAGE_TITLES.getOrElse(page) { "" },
                 settingsOpen = page == PAGE_SETTINGS,
+                onSearch = { searchOpen = true },
                 onSettings = {
                     if (page == PAGE_SETTINGS) {
                         page = pageBeforeSettings
@@ -204,10 +207,11 @@ fun TaghvimApp(viewModel: PeopleViewModel) {
         )
     }
 
+    if (searchOpen) GlobalSearchDialog(viewModel, onDismiss = { searchOpen = false })
+
     UpdateDialog(
         state = viewModel.updateUi,
-        onDismiss = viewModel::dismissUpdate,
-        onDownload = viewModel::downloadUpdate
+        onDismiss = viewModel::dismissUpdate
     )
 
     viewModel.pendingImport?.let { incoming ->
@@ -309,7 +313,7 @@ private const val PAGE_EXCHANGE = 7
 private val PAGE_TITLES = listOf("تقویم", "مدیریت نیروها", "مقایسه", "سوابق تشویق و تنبیه", "ارزیابی نیروها", "تنظیمات", "جمع‌بندی", "گزارش")
 
 @Composable
-private fun AppHeader(title: String, settingsOpen: Boolean, onSettings: () -> Unit) {
+private fun AppHeader(title: String, settingsOpen: Boolean, onSearch: () -> Unit, onSettings: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -327,6 +331,14 @@ private fun AppHeader(title: String, settingsOpen: Boolean, onSettings: () -> Un
             fontWeight = FontWeight.Bold,
             maxLines = 1
         )
+        IconButton(onClick = onSearch, modifier = Modifier.size(48.dp)) {
+            Icon(
+                Icons.Default.Search,
+                contentDescription = "جست‌وجو",
+                tint = Color.White,
+                modifier = Modifier.size(28.dp)
+            )
+        }
         IconButton(onClick = onSettings, modifier = Modifier.size(48.dp)) {
             Icon(
                 Icons.Default.Settings,

@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import ir.taghvimkari.app.BuildConfig
+import ir.taghvimkari.app.data.AutoBackup
 import ir.taghvimkari.app.data.BackupPrefs
 import ir.taghvimkari.app.data.DataExchange
 import ir.taghvimkari.app.data.ExchangeData
@@ -22,7 +23,6 @@ import ir.taghvimkari.app.data.ReportStore
 import ir.taghvimkari.app.data.LocalStore
 import ir.taghvimkari.app.data.UpdateChecker
 import ir.taghvimkari.app.data.UpdateInfo
-import ir.taghvimkari.app.data.UpdateInstaller
 import ir.taghvimkari.app.data.UiPrefs
 import ir.taghvimkari.app.data.UpdateResult
 import ir.taghvimkari.app.domain.EvaluationEntry
@@ -33,6 +33,7 @@ import ir.taghvimkari.app.domain.mergeReports
 import ir.taghvimkari.app.domain.Person
 import ir.taghvimkari.app.domain.Transfer
 import ir.taghvimkari.app.domain.dedupePeople
+import ir.taghvimkari.app.domain.AUTO_BACKUP_DAYS
 import ir.taghvimkari.app.domain.BACKUP_SNOOZE_DAYS
 import ir.taghvimkari.app.domain.ReportEntry
 import ir.taghvimkari.app.domain.TextSize
@@ -50,9 +51,6 @@ sealed interface UpdateUi {
     data class UpToDate(val latest: String?) : UpdateUi
     data class Failed(val reason: String) : UpdateUi
     data class Available(val info: UpdateInfo) : UpdateUi
-    data class Downloading(val percent: Int) : UpdateUi
-    data class Downloaded(val path: String) : UpdateUi
-    data class DownloadFailed(val info: UpdateInfo) : UpdateUi
 }
 
 /** A deletion that can still be taken back: the snackbar shows [message] with a "بازگرداندن" button that runs [restore]. */
@@ -240,6 +238,63 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
             backupPrefs.snoozedUntilDay = null
         }
         return ok
+    }
+
+    // ------------------------------------------------------------------ automatic weekly backup
+    /** The folder chosen for the automatic backup (null = off). */
+    var autoBackupFolder: String? by mutableStateOf(backupPrefs.autoFolder)
+        private set
+    var lastAutoBackupDay: Long? by mutableStateOf(backupPrefs.lastAutoDay)
+        private set
+
+    /** True when the last automatic backup could not be written (the folder is gone or not allowed any more). */
+    var autoBackupFailed: Boolean by mutableStateOf(false)
+        private set
+    private var autoBackupRunning = false
+
+    fun setAutoBackupFolder(uri: Uri?) {
+        autoBackupFolder = uri?.toString()
+        backupPrefs.autoFolder = autoBackupFolder
+        autoBackupFailed = false
+        if (uri == null) {
+            lastAutoBackupDay = null
+            backupPrefs.lastAutoDay = null
+        }
+    }
+
+    /** Makes the automatic backup when a folder is chosen and the last one is a week old (or [force]). */
+    fun autoBackupIfDue(force: Boolean = false) {
+        val folder = autoBackupFolder ?: return
+        if (autoBackupRunning) return
+        val today = LocalDate.now().toEpochDay()
+        val last = lastAutoBackupDay
+        if (!force && last != null && today - last in 0 until AUTO_BACKUP_DAYS) return
+        if (people.isEmpty() && reports.isEmpty() && evaluations.isEmpty() && summaryCells.isEmpty()) return
+        autoBackupRunning = true
+        val app = getApplication<Application>()
+        val sealed = DataExchange.seal(DataExchange.encodeFull(people, reports, evaluations, summaryCells))
+        viewModelScope.launch {
+            val written = withContext(Dispatchers.IO) {
+                runCatching { AutoBackup.write(app, folder, "taghvim-auto-backup-${LocalDate.now()}.json", sealed) }.getOrNull()
+            }
+            if (written == null) {
+                autoBackupFailed = true
+            } else {
+                autoBackupFailed = false
+                lastAutoBackupDay = today
+                backupPrefs.lastAutoDay = today
+                // an automatic backup counts as a backup: the monthly reminder starts over
+                lastBackupDay = today
+                backupPrefs.lastBackupDay = today
+                snoozedUntilDay = null
+                backupPrefs.snoozedUntilDay = null
+                val all = listOf(written) + backupPrefs.autoFiles
+                val keep = all.take(AutoBackup.KEEP)
+                withContext(Dispatchers.IO) { all.drop(AutoBackup.KEEP).forEach { AutoBackup.delete(app, it) } }
+                backupPrefs.autoFiles = keep
+            }
+            autoBackupRunning = false
+        }
     }
 
     init {
@@ -502,19 +557,6 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
                 is UpdateResult.Failed -> if (manual) UpdateUi.Failed(result.reason) else UpdateUi.Idle
             }
             checkInFlight = false
-        }
-    }
-
-    fun downloadUpdate(info: UpdateInfo) {
-        val url = info.apkUrl?.takeIf { it.isNotBlank() }
-        if (url == null) {
-            updateUi = UpdateUi.DownloadFailed(info)
-            return
-        }
-        updateUi = UpdateUi.Downloading(0)
-        viewModelScope.launch {
-            val file = UpdateInstaller.download(getApplication(), url) { p -> updateUi = UpdateUi.Downloading(p) }
-            updateUi = if (file != null) UpdateUi.Downloaded(file.absolutePath) else UpdateUi.DownloadFailed(info)
         }
     }
 

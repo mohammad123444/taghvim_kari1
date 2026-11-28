@@ -150,9 +150,8 @@ fun mergeEvaluations(current: List<EvaluationEntry>, incoming: List<EvaluationEn
     return EvaluationMerge(out, added, duplicates)
 }
 
-/** 38.347 -> "۳۸٫۳۵" */
-fun formatScore(value: Double): String =
-    String.format(Locale.ROOT, "%.2f", value).toPersianDigits().replace('.', '٫')
+/** 38.347 -> "۳۸" (scores are shown as whole numbers) */
+fun formatScore(value: Double): String = formatNumber(value)
 
 /** A plain-text evaluation that can be sent through any messenger. */
 fun buildEvaluationText(entry: EvaluationEntry, nameOf: String): String = buildString {

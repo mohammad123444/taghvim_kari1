@@ -60,6 +60,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -94,6 +96,9 @@ import ir.taghvimkari.app.domain.previousEvaluation
 import ir.taghvimkari.app.domain.setScoreAt
 import ir.taghvimkari.app.domain.sortedByTeam
 import kotlinx.coroutines.launch
+import ir.taghvimkari.app.data.ShareBytes
+import ir.taghvimkari.app.data.Xlsx
+import ir.taghvimkari.app.domain.roundWhole
 import ir.taghvimkari.app.domain.toPersian
 import java.time.LocalDate
 import java.util.UUID
@@ -924,6 +929,34 @@ private fun ResultsSection(
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 modifier = Modifier.fillMaxWidth()
             ) { Text("حذف") }
+            // the filtered list as an Excel file: one row per evaluation, one column per item
+            val context = LocalContext.current
+            var excelFailed by remember { mutableStateOf(false) }
+            ActionButton(
+                "خروجی Excel (همین فهرست)",
+                {
+                    val header = listOf("نام", "ارزیاب", "دوره", "وضعیت", "نمرهٔ نهایی", "جمع") + EvaluationItems.all
+                    val body = filtered.map { e ->
+                        listOf<Any?>(
+                            nameOf(e), e.evaluatorName, e.periodText(),
+                            if (e.isComplete) "کامل" else "ناتمام",
+                            roundWhole(e.finalScore), e.total
+                        ) + EvaluationItems.all.indices.map { i -> e.scores.getOrNull(i)?.takeIf { it > 0 } }
+                    }
+                    excelFailed = !ShareBytes.share(
+                        context,
+                        "taghvim-evaluations-${java.time.LocalDate.now()}.xlsx",
+                        Xlsx.MIME,
+                        Xlsx.build("ارزیابی‌ها", listOf(header) + body, listOf(26, 22, 30, 10, 12, 8) + EvaluationItems.all.map { 16 }),
+                        "ارسال ارزیابی‌ها (Excel)"
+                    )
+                },
+                Modifier.fillMaxWidth(),
+                icon = Icons.Default.Share,
+                filled = false,
+                enabled = filtered.isNotEmpty()
+            )
+            if (excelFailed) Text("ساخت یا ارسال فایل انجام نشد.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
     }
 
     if (confirmDelete) {
@@ -979,35 +1012,6 @@ private fun ResultsSection(
     }
 
     if (done.isEmpty()) return
-
-    // ----- per person
-    if (personFilter.isBlank()) {
-        val perPerson = done.groupBy { it.personId }
-            .map { (id, list) -> Triple(id, nameOf(list.first()), list) }
-            .sortedWith(compareBy<Triple<String, String, List<EvaluationEntry>>> { rankById[it.first] ?: Int.MAX_VALUE }.thenByDescending { Evaluations.average(it.third) })
-        FoldBox("میانگین هر نفر") {
-                perPerson.forEach { (id, name, list) ->
-                    val avg = Evaluations.average(list)
-                    val lvl = Evaluations.levelOf(avg)
-                    Column(Modifier.fillMaxWidth().clickable { personFilter = id }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            StyledName(name, id in memberIds, Modifier.weight(1f))
-                            Text(
-                                "${formatScore(avg)} از ${EvaluationItems.FINAL_MAX.toPersian()}",
-                                fontWeight = FontWeight.Bold,
-                                color = levelColor(lvl)
-                            )
-                        }
-                        ScoreBar(avg / EvaluationItems.FINAL_MAX, levelColor(lvl), 8)
-                        Text(
-                            "${list.size.toPersian()} ارزیابی • ${lvl.title}",
-                            color = Color.Gray,
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
-                }
-        }
-    }
 
     // ----- entries, one foldable group per evaluator (his name on top)
     Text(

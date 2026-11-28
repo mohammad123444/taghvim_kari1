@@ -457,7 +457,7 @@ private fun ReportEntryDialog(
                     FormTextField(
                         value = reward, onValueChange = { reward = it },
                         label = "ساعت تشویق",
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         accent = RewardGreen,
                         tint = RewardGreen.copy(alpha = .06f),
                         modifier = Modifier.weight(1f)
@@ -465,7 +465,7 @@ private fun ReportEntryDialog(
                     FormTextField(
                         value = punishment, onValueChange = { punishment = it },
                         label = "ساعت تنبیه",
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         accent = PunishRed,
                         tint = PunishRed.copy(alpha = .06f),
                         modifier = Modifier.weight(1f)

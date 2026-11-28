@@ -24,8 +24,8 @@ class EvaluationTest {
     }
 
     @Test fun scoreIsFormattedWithPersianDigitsAndTwoDecimals() {
-        assertEquals("۳۸٫۳۵", formatScore(98 * 45 / 115.0))
-        assertEquals("۴۵٫۰۰", formatScore(45.0))
+        assertEquals("۳۸", formatScore(98 * 45 / 115.0))
+        assertEquals("۴۵", formatScore(45.0))
     }
 
     @Test fun levelsFollowThePercentageOf45() {

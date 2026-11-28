@@ -25,22 +25,14 @@ data class ReportTotals(val count: Int, val reward: Double, val punishment: Doub
 fun List<ReportEntry>.totals(): ReportTotals =
     ReportTotals(size, sumOf { it.rewardHours }, sumOf { it.punishmentHours })
 
-/** 2 -> "۲", 1.5 -> "۱٫۵" */
-fun formatHours(hours: Double): String {
-    val rounded = Math.round(hours * 10) / 10.0
-    val text = if (rounded == Math.floor(rounded)) {
-        rounded.toLong().toString()
-    } else {
-        String.format(Locale.ROOT, "%.1f", rounded)
-    }
-    return text.toPersianDigits().replace('.', '٫')
-}
+/** Hours are whole numbers too: 2 -> "۲", 1.5 -> "۲". */
+fun formatHours(hours: Double): String = formatNumber(hours)
 
-/** Reads hours typed by the user with Persian or Latin digits and any common decimal separator. */
+/** Reads hours typed by the user with Persian or Latin digits; a decimal part is rounded to a whole number. */
 fun parseHours(text: String): Double {
     val clean = text.trim().toLatinDigits()
         .replace('٫', '.').replace('،', '.').replace(',', '.').replace('/', '.')
-    return (clean.toDoubleOrNull() ?: 0.0).coerceIn(0.0, 100000.0)
+    return roundWhole((clean.toDoubleOrNull() ?: 0.0).coerceIn(0.0, 100000.0)).toDouble()
 }
 
 /** A plain-text report that can be sent through any messenger. */
