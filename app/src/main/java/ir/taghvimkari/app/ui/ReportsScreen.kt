@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ir.taghvimkari.app.data.DataExchange
 import ir.taghvimkari.app.domain.JalaliDate
+import ir.taghvimkari.app.domain.MIN_SEARCH_CHARS
 import ir.taghvimkari.app.domain.Person
 import ir.taghvimkari.app.domain.ReportEntry
 import ir.taghvimkari.app.domain.ReportPeriod
@@ -391,6 +392,8 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
             entry = finalEntry,
             name = nameOf(finalEntry),
             lastFinalBy = viewModel.lastFinalBy,
+            // Who may give a final opinion: people already known as reporters / superiors, and every registered person.
+            knownNames = reports.map { it.reporter } + reports.map { it.finalBy } + people.map { it.name },
             onDismiss = { finalId = null },
             onSave = { by, reward, punishment ->
                 viewModel.setFinalOpinion(finalEntry.id, by, reward, punishment)
@@ -785,6 +788,7 @@ private fun FinalOpinionDialog(
     entry: ReportEntry,
     name: String,
     lastFinalBy: String,
+    knownNames: List<String>,
     onDismiss: () -> Unit,
     onSave: (by: String, reward: Double, punishment: Double) -> Unit,
     onClear: () -> Unit
@@ -793,6 +797,19 @@ private fun FinalOpinionDialog(
     var reward by rememberSaveable { mutableStateOf(entry.rewardHours.takeIf { it > 0 }?.let { formatHours(it) } ?: "") }
     var punishment by rememberSaveable { mutableStateOf(entry.punishmentHours.takeIf { it > 0 }?.let { formatHours(it) } ?: "") }
     var showErrors by remember { mutableStateOf(false) }
+    // The name must be one of the known names: after 3 characters the matches are offered, and only a chosen name is accepted.
+    val pool = remember(knownNames) {
+        knownNames.map { it.trim() }.filter { it.isNotBlank() }.distinctBy { normalizeFa(it) }
+    }
+    val typedName = normalizeFa(by.trim())
+    val nameIsValid = pool.any { normalizeFa(it) == typedName }
+    val nameSuggestions = if (typedName.length < MIN_SEARCH_CHARS || nameIsValid) {
+        emptyList()
+    } else {
+        pool.filter { normalizeFa(it).contains(typedName) }
+            .sortedBy { if (normalizeFa(it).startsWith(typedName)) 0 else 1 }
+            .take(6)
+    }
 
     FormDialog(
         onDismiss = onDismiss,
@@ -817,8 +834,28 @@ private fun FinalOpinionDialog(
                 FormTextField(
                     value = by, onValueChange = { by = it },
                     label = "نام مافوق (ثبت‌کنندهٔ نظر نهایی)",
-                    isError = showErrors && by.isBlank()
+                    isError = showErrors && !nameIsValid
                 )
+                if (nameSuggestions.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        nameSuggestions.forEach { n ->
+                            Surface(
+                                color = Purple.copy(alpha = .08f),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { by = n }
+                            ) {
+                                Text("👤 $n", Modifier.padding(horizontal = 12.dp, vertical = 9.dp), fontWeight = FontWeight.Bold, color = Navy)
+                            }
+                        }
+                    }
+                } else if (typedName.isNotEmpty() && !nameIsValid) {
+                    Text(
+                        if (typedName.length < MIN_SEARCH_CHARS) "حداقل ${MIN_SEARCH_CHARS.toPersian()} حرف از نام را بنویسید و از فهرست انتخاب کنید."
+                        else "نامی با این حروف پیدا نشد؛ باید یکی از نام‌های فهرست را انتخاب کنید.",
+                        color = if (showErrors) MaterialTheme.colorScheme.error else Color.Gray,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     FormTextField(
                         value = reward, onValueChange = { reward = it },
@@ -846,7 +883,12 @@ private fun FinalOpinionDialog(
         },
         confirmButton = {
             FormSaveButton("ثبت نظر نهایی", onClick = {
-                if (by.isNotBlank()) onSave(by.trim(), parseHours(reward), parseHours(punishment)) else showErrors = true
+                if (nameIsValid) {
+                    // the name exactly as it is in the list
+                    onSave(pool.first { normalizeFa(it) == typedName }, parseHours(reward), parseHours(punishment))
+                } else {
+                    showErrors = true
+                }
             })
         },
         dismissButton = {

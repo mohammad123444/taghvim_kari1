@@ -5,7 +5,7 @@ plugins {
 }
 
 // Values injected by GitHub Actions (all optional for local builds).
-val ciVersionName: String = System.getenv("APP_VERSION_NAME") ?: "2.8.2"
+val ciVersionName: String = System.getenv("APP_VERSION_NAME") ?: "2.8.3"
 // Derived from the version (1.4.0 -> 10400) so debug and release builds always compare correctly,
 // otherwise Android refuses the update as a "downgrade".
 val ciVersionCode: Int = ciVersionName.split(".").map { it.toIntOrNull() ?: 0 }.let {
