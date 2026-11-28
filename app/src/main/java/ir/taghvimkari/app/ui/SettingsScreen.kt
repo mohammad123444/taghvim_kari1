@@ -111,24 +111,6 @@ fun SettingsScreen(viewModel: PeopleViewModel) {
         }
 
         SettingsCard("پشتیبان‌گیری") {
-            val days = daysSinceBackup(LocalDate.now().toEpochDay(), viewModel.lastBackup)
-            Text(
-                if (viewModel.lastBackup == null) "هنوز پشتیبان نگرفته‌اید."
-                else "آخرین پشتیبان: ${JalaliDate.from(LocalDate.ofEpochDay(viewModel.lastBackup!!)).display()}" +
-                    (if (days != null) " (${days.toInt().toPersian()} روز پیش)" else "")
-            )
-            Button(
-                onClick = { backupFailed = !viewModel.sendBackup(context) },
-                enabled = people.isNotEmpty() || viewModel.reports.isNotEmpty() || viewModel.evaluations.isNotEmpty() ||
-                    viewModel.summaryCells.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("ارسال") }
-            if (backupFailed) {
-                Text("ارسال انجام نشد.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-
-        SettingsCard("پشتیبان خودکار هفتگی") {
             val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
                 if (uri != null) {
                     runCatching {
@@ -141,16 +123,37 @@ fun SettingsScreen(viewModel: PeopleViewModel) {
                     viewModel.autoBackupIfDue(force = true)
                 }
             }
+            // One last-backup line for both ways: the weekly automatic backup also counts as a backup.
+            val days = daysSinceBackup(LocalDate.now().toEpochDay(), viewModel.lastBackup)
+            Text(
+                if (viewModel.lastBackup == null) "هنوز پشتیبان نگرفته‌اید."
+                else "آخرین پشتیبان: ${JalaliDate.from(LocalDate.ofEpochDay(viewModel.lastBackup!!)).display()}" +
+                    (if (days != null) " (${days.toInt().toPersian()} روز پیش)" else "")
+            )
+            Button(
+                onClick = { backupFailed = !viewModel.sendBackup(context) },
+                enabled = people.isNotEmpty() || viewModel.reports.isNotEmpty() || viewModel.evaluations.isNotEmpty() ||
+                    viewModel.summaryCells.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("ارسال فایل پشتیبان") }
+            if (backupFailed) {
+                Text("ارسال انجام نشد.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+
             val folder = viewModel.autoBackupFolder
+            Text("ذخیرهٔ خودکار هفتگی", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp))
             if (folder == null) {
-                Text("پوشه‌ای انتخاب کنید تا هر هفته، با باز کردن برنامه، یک فایل پشتیبان در آن ذخیره شود. چون بیرون از برنامه ذخیره می‌شود، با حذف برنامه یا خراب شدن گوشی هم می‌ماند.")
-                Button(onClick = { folderPicker.launch(null) }, modifier = Modifier.fillMaxWidth()) { Text("انتخاب پوشه") }
+                Text(
+                    "پوشه‌ای انتخاب کنید تا هر هفته، با باز کردن برنامه، یک فایل پشتیبان خودکار در آن ذخیره شود؛ با حذف برنامه یا خراب شدن گوشی هم می‌ماند.",
+                    color = Color.Gray, style = MaterialTheme.typography.bodySmall
+                )
+                OutlinedButton(onClick = { folderPicker.launch(null) }, modifier = Modifier.fillMaxWidth()) { Text("انتخاب پوشه") }
             } else {
                 Text("پوشه: " + (Uri.parse(folder).lastPathSegment?.substringAfter(':').orEmpty().ifBlank { "انتخاب‌شده" }))
                 val lastAuto = viewModel.lastAutoBackupDay
                 Text(
                     if (lastAuto == null) "هنوز پشتیبان خودکاری ساخته نشده است."
-                    else "آخرین پشتیبان خودکار: ${JalaliDate.from(LocalDate.ofEpochDay(lastAuto)).display()}"
+                    else "آخرین ذخیرهٔ خودکار: ${JalaliDate.from(LocalDate.ofEpochDay(lastAuto)).display()}"
                 )
                 if (viewModel.autoBackupFailed) {
                     Text(
@@ -159,7 +162,7 @@ fun SettingsScreen(viewModel: PeopleViewModel) {
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { viewModel.autoBackupIfDue(force = true) }, modifier = Modifier.weight(1f)) { Text("همین الان") }
+                    OutlinedButton(onClick = { viewModel.autoBackupIfDue(force = true) }, modifier = Modifier.weight(1f)) { Text("همین الان") }
                     OutlinedButton(onClick = { folderPicker.launch(null) }, modifier = Modifier.weight(1f)) { Text("تغییر پوشه") }
                     OutlinedButton(onClick = { viewModel.setAutoBackupFolder(null) }, modifier = Modifier.weight(1f)) { Text("خاموش") }
                 }

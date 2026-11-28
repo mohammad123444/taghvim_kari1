@@ -89,10 +89,10 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
         summaryStore.save(summaryCells)
     }
 
-    /** Sets (or, with null, clears) the «تشویقی» number of many people for one period in one go. */
-    fun setBonusForAll(personIds: Collection<String>, periodKey: String, value: Double?) {
+    /** Sets (value) or clears (null) the «تشویقی» number of the given people for one period, saved once. */
+    fun setBonuses(values: Map<String, Double?>, periodKey: String) {
         var cells = summaryCells
-        for (id in personIds) {
+        for ((id, value) in values) {
             val old = cells.firstOrNull { it.personId == id && it.periodKey == periodKey } ?: SummaryCell(id, periodKey)
             val new = old.copy(bonus = value)
             cells = cells.filterNot { it.personId == id && it.periodKey == periodKey } + (if (new.isEmpty) emptyList() else listOf(new))

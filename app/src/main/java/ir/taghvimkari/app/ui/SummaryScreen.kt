@@ -127,7 +127,7 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
     var picker by rememberSaveable { mutableStateOf(0) } // 0 closed, 1 from, 2 to
     var editPerson by rememberSaveable { mutableStateOf("") }
     var editColumn by rememberSaveable { mutableStateOf(0) } // 3 = ملاحظات (number with comment), 4 = رئیس, 5 = تشویقی
-    var bulkBonus by rememberSaveable { mutableStateOf(false) } // «تشویقی» for everybody at once
+    var bulkBonus by rememberSaveable { mutableStateOf(false) } // «تشویقی» per group at once
     var foldedGroups by rememberSaveable { mutableStateOf("") } // employment kinds that are folded
 
     val hasPeriod = fromEpoch != NO_DATE && toEpoch != NO_DATE
@@ -271,7 +271,7 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
                 }
             }
             Text(
-                "ستون‌های «رئیس»، «ملاحظات» و «تشویقی» را با لمس کردن پر کنید؛ در «ملاحظات» می‌توانید دلیلش را هم بنویسید. با لمس عنوان «تشویقی ✎» یک عدد را یکجا برای همهٔ نیروهای فهرست ثبت می‌کنید.",
+                "ستون‌های «رئیس»، «ملاحظات» و «تشویقی» را با لمس کردن پر کنید؛ در «ملاحظات» می‌توانید دلیلش را هم بنویسید. با لمس عنوان «تشویقی ✎» برای هر گروه (رسمی، پیمانکاری، قرارداد مستقیم) یک عدد را یکجا ثبت می‌کنید.",
                 color = Color.Gray,
                 style = MaterialTheme.typography.bodySmall
             )
@@ -320,10 +320,9 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
     // ----- «تشویقی» for everybody in the list at once
     if (bulkBonus) {
         BulkBonusDialog(
-            count = rows.size,
-            hasValues = rows.any { it.cell?.bonus != null },
-            onApply = { number ->
-                viewModel.setBonusForAll(rows.map { it.person.id }, key, number)
+            rows = rows,
+            onApply = { values ->
+                viewModel.setBonuses(values, key)
                 bulkBonus = false
             },
             onDismiss = { bulkBonus = false }
@@ -385,43 +384,71 @@ private fun SummaryCellBox(
     }
 }
 
-/** One number written for every person shown in the table («تشویقی»); an empty box with «پاک کردن همه» clears the column. */
+/**
+ * «تشویقی» written per employment group in one go: a number for رسمی, another for پیمانکاری and another for
+ * قرارداد مستقیم. A group whose box is left empty is not touched, so one group alone can be filled; «پاک» clears
+ * the column of that group. Only the people shown in the table are changed.
+ */
 @Composable
-private fun BulkBonusDialog(count: Int, hasValues: Boolean, onApply: (Double?) -> Unit, onDismiss: () -> Unit) {
-    var n by remember { mutableStateOf("") }
-    val parsed = parseNumber(n)
-    val valid = parsed != null
+private fun BulkBonusDialog(rows: List<SummaryRow>, onApply: (Map<String, Double?>) -> Unit, onDismiss: () -> Unit) {
+    val groups = SUMMARY_ORDER.mapNotNull { emp -> rows.filter { it.person.employment == emp }.takeIf { it.isNotEmpty() }?.let { emp to it } }
+    var texts by remember { mutableStateOf(mapOf<Employment, String>()) }
+    var cleared by remember { mutableStateOf(setOf<Employment>()) }
+    val allValid = groups.all { (emp, _) -> texts[emp].orEmpty().isBlank() || parseNumber(texts[emp].orEmpty()) != null }
+    val anyChange = groups.any { (emp, _) -> emp in cleared || texts[emp].orEmpty().isNotBlank() }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("تشویقی برای همه", fontWeight = FontWeight.Bold) },
+        title = { Text("تشویقی به تفکیک گروه", fontWeight = FontWeight.Bold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    "این عدد برای ${count.toPersian()} نفرِ فهرست فعلی ثبت می‌شود و مقدار قبلی ستون «تشویقی» را عوض می‌کند. بعداً هر نفر را جدا هم می‌توانید تغییر دهید.",
+                    "برای هر گروه یک عدد بنویسید تا برای همهٔ نفرات همان گروه ثبت شود. جعبهٔ خالی یعنی آن گروه دست نمی‌خورد؛ پس می‌توانید فقط برای یک گروه وارد کنید. بعداً هر نفر را جدا هم می‌توانید تغییر دهید.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray
                 )
-                OutlinedTextField(
-                    shape = FormFieldShape, colors = formFieldColors(),
-                    value = n, onValueChange = { n = it },
-                    label = { Text("عدد (منفی هم می‌شود)") }, singleLine = true,
-                    textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.Ltr),
-                    isError = n.isNotBlank() && !valid,
-                    modifier = Modifier.fillMaxWidth().keepVisibleWhenFocused()
-                )
+                groups.forEach { (emp, list) ->
+                    val text = texts[emp].orEmpty()
+                    val hasValues = list.any { it.cell?.bonus != null }
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("${summaryTitle(emp)} (${list.size.toPersian()} نفر)", Modifier.weight(1f), fontWeight = FontWeight.Bold, color = employmentAccent(emp))
+                            if (hasValues) {
+                                TextButton(onClick = { texts = texts + (emp to ""); cleared = cleared + emp }) {
+                                    Text("پاک کردن", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+                        }
+                        OutlinedTextField(
+                            shape = FormFieldShape, colors = formFieldColors(),
+                            value = text,
+                            onValueChange = { texts = texts + (emp to it); cleared = cleared - emp },
+                            label = { Text(if (emp in cleared) "مقدار این گروه پاک می‌شود" else "عدد (منفی هم می‌شود)") },
+                            singleLine = true,
+                            textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.Ltr),
+                            isError = text.isNotBlank() && parseNumber(text) == null,
+                            modifier = Modifier.fillMaxWidth().keepVisibleWhenFocused()
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onApply(parsed) }, enabled = valid) { Text("ثبت برای همه", fontWeight = FontWeight.Bold) }
+            TextButton(
+                onClick = {
+                    val out = LinkedHashMap<String, Double?>()
+                    groups.forEach { (emp, list) ->
+                        val t = texts[emp].orEmpty()
+                        when {
+                            emp in cleared -> list.forEach { out[it.person.id] = null }
+                            t.isNotBlank() -> list.forEach { out[it.person.id] = parseNumber(t) }
+                        }
+                    }
+                    onApply(out)
+                },
+                enabled = allValid && anyChange
+            ) { Text("ثبت", fontWeight = FontWeight.Bold) }
         },
-        dismissButton = {
-            Row {
-                if (hasValues) {
-                    TextButton(onClick = { onApply(null) }) { Text("پاک کردن همه", color = MaterialTheme.colorScheme.error) }
-                }
-                TextButton(onClick = onDismiss) { Text("انصراف") }
-            }
-        }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("انصراف") } }
     )
 }
 
