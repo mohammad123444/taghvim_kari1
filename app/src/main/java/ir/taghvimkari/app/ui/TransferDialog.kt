@@ -47,8 +47,10 @@ fun TransferDialog(
     var showPicker by rememberSaveable { mutableStateOf(false) }
     val date = LocalDate.ofEpochDay(dateEpoch)
 
-    val leaders = remember(people, targetShift) {
-        uniqueLabels(people.filter { it.active && it.isLeader && it.id != person.id && it.shiftName == targetShift })
+    // Every active leader of every shift is offered (not only those of the target shift), each with his shift.
+    val leaders = remember(people) {
+        uniqueLabels(people.filter { it.active && it.isLeader && it.id != person.id })
+            .map { (p, label) -> p to (if (p.shiftName.isBlank()) label else "$label • ${shiftTitle(p.shiftName)}") }
     }
     val others = remember(people) { uniqueLabels(people.filter { it.active && it.id != person.id }) }
     val leaderLabel = leaders.firstOrNull { it.first.id == leaderId }?.second ?: NO_LEADER
@@ -80,9 +82,16 @@ fun TransferDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.DarkGray
                 )
-                FilterDropdown("شیفت مقصد", SHIFT_NAMES, targetShift) { v -> targetShift = v; leaderId = "" }
+                FilterDropdown("شیفت مقصد", SHIFT_NAMES, targetShift) { v ->
+                    targetShift = v
+                    // a leader of another shift no longer fits the chosen shift
+                    if (leaders.firstOrNull { it.first.id == leaderId }?.first?.shiftName != v) leaderId = ""
+                }
                 FilterDropdown("سرشیفت مقصد", listOf(NO_LEADER) + leaders.map { it.second }, leaderLabel) { v ->
-                    leaderId = leaders.firstOrNull { it.second == v }?.first?.id ?: ""
+                    val chosen = leaders.firstOrNull { it.second == v }?.first
+                    leaderId = chosen?.id ?: ""
+                    // the person joins that leader's team, so the shift follows the leader
+                    if (chosen != null && chosen.shiftName.isNotBlank()) targetShift = chosen.shiftName
                 }
             } else {
                 PersonSearchField(

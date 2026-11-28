@@ -39,13 +39,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.sp
+import ir.taghvimkari.app.data.ShareBytes
+import ir.taghvimkari.app.data.Xlsx
 import ir.taghvimkari.app.domain.JalaliDate
+import ir.taghvimkari.app.domain.shiftTitle
 import ir.taghvimkari.app.domain.MIN_SEARCH_CHARS
 import ir.taghvimkari.app.domain.Person
 import ir.taghvimkari.app.domain.nameMatches
@@ -97,6 +101,39 @@ private fun runsOf(person: Person, from: LocalDate, days: Int): List<Pair<Int, I
     return out
 }
 
+/** The day-by-day sheet of the comparison: one row per day, one column per person, plus totals at the bottom. */
+private fun compareSheet(chosen: List<Person>, from: LocalDate, days: Int): List<List<Any?>> {
+    fun kindName(k: Int) = when (k) { 0 -> "استراحت"; 2 -> "شب‌کار"; else -> "کار" }
+    val header = listOf<Any?>("تاریخ", "روز هفته") + chosen.map { it.name } + listOf("وضعیت جمعی")
+    val rows = ArrayList<List<Any?>>()
+    rows.add(header)
+    val work = IntArray(chosen.size)
+    val rest = IntArray(chosen.size)
+    var allWork = 0
+    var allRest = 0
+    for (i in 0 until days) {
+        val date = from.plusDays(i.toLong())
+        val kinds = chosen.map { kindOf(it, date) }
+        kinds.forEachIndexed { idx, k -> if (k == 0) rest[idx]++ else work[idx]++ }
+        val together = when {
+            chosen.size < 2 -> ""
+            kinds.all { it != 0 } -> { allWork++; "همه سر کار" }
+            kinds.all { it == 0 } -> { allRest++; "همه در استراحت" }
+            else -> ""
+        }
+        rows.add(
+            listOf<Any?>(JalaliDate.from(date).display(), JalaliDate.WEEKDAY_NAMES[ShiftEngine.persianWeekday(date)]) +
+                kinds.map { kindName(it) } + listOf(together)
+        )
+    }
+    rows.add(emptyList())
+    rows.add(listOf<Any?>("جمع روزهای کار", "") + work.toList() + listOf(if (chosen.size >= 2) allWork else null))
+    rows.add(listOf<Any?>("جمع روزهای استراحت", "") + rest.toList() + listOf(if (chosen.size >= 2) allRest else null))
+    rows.add(listOf<Any?>("شیفت", "") + chosen.map { if (it.shiftName.isBlank()) "" else shiftTitle(it.shiftName) } + listOf(""))
+    rows.add(listOf<Any?>("نوع همکاری", "") + chosen.map { "${it.employment.title} • ${it.category.title}" } + listOf(""))
+    return rows
+}
+
 private data class CompareRow(val person: Person, val runs: List<Pair<Int, Int>>) {
     val workDays: Int get() = runs.filter { it.first != 0 }.sumOf { it.second }
     val restDays: Int get() = runs.filter { it.first == 0 }.sumOf { it.second }
@@ -114,6 +151,8 @@ fun CompareScreen(people: List<Person>) {
     var toEpoch by rememberSaveable { mutableStateOf(NO_DATE) }
     var picker by rememberSaveable { mutableStateOf(0) } // 0 = closed, 1 = from, 2 = to
     var showPeople by rememberSaveable { mutableStateOf(false) }
+    var exportFailed by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
 
     val datesSet = fromEpoch != NO_DATE && toEpoch != NO_DATE
     val from = LocalDate.ofEpochDay(if (fromEpoch == NO_DATE) today.toEpochDay() else fromEpoch)
@@ -280,6 +319,21 @@ fun CompareScreen(people: List<Person>) {
                         TogetherTile("همه با هم در استراحت", restRanges.sumOf { it.days }, RestTextColor, Modifier.weight(1f)) { togetherDialog = 2 }
                     }
                 }
+            }
+            OutlinedButton(
+                onClick = {
+                    exportFailed = !ShareBytes.share(
+                        context,
+                        "taghvim-compare-${LocalDate.now()}.xlsx",
+                        Xlsx.MIME,
+                        Xlsx.build("مقایسه نیروها", compareSheet(chosen, from, days), listOf(14, 12) + chosen.map { 16 } + listOf(18)),
+                        "ارسال مقایسه نیروها (Excel)"
+                    )
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("خروجی Excel (ریز روزانه)") }
+            if (exportFailed) {
+                Text("ارسال انجام نشد.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -464,11 +518,6 @@ private fun PeoplePickerDialog(
                     TextButton(onClick = { draft = draft + shown.map { it.id } }) { Text("انتخاب همه") }
                     TextButton(onClick = { draft = emptySet() }) { Text("هیچ‌کدام") }
                 }
-                Text(
-                    "با انتخاب سرشیفت، زیرمجموعه‌هایش هم انتخاب می‌شوند؛ می‌توانید تکی برشان دارید.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
-                )
                 Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
                     ShiftEmploymentFolds(items = shown, person = { it }, stateKey = "compare", forceOpen = query.isNotBlank()) { p ->
                         val checked = p.id in draft
@@ -477,12 +526,8 @@ private fun PeoplePickerDialog(
                             Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    val ids = if (p.isLeader) {
-                                        setOf(p.id) + people.filter { it.leaderId == p.id }.map { it.id }
-                                    } else {
-                                        setOf(p.id)
-                                    }
-                                    draft = if (checked) draft - ids else draft + ids
+                                    // only the tapped person is (un)ticked, never his whole team
+                                    draft = if (checked) draft - p.id else draft + p.id
                                 }
                                 .padding(start = if (isMember) 18.dp else 0.dp, top = 2.dp, bottom = 2.dp),
                             verticalAlignment = Alignment.CenterVertically
