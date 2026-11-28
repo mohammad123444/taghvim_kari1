@@ -24,7 +24,7 @@ class SummaryBackupTest {
         date = LocalDate.of(2026, 11, 1), scores = List(EvaluationItems.count) { 4 },
         dateTo = LocalDate.of(2026, 11, 30)
     )
-    private val cell = SummaryCell("p1", "2026-11-01|2026-11-30", extra = -2.5, comment = "تأخیر", level = 3.0)
+    private val cell = SummaryCell("p1", "2026-11-01|2026-11-30", extra = -2.5, comment = "تأخیر", level = 3.0, bonus = 4.0)
 
     @Test fun fullBackupKeepsEverythingIncludingSummary() {
         val text = DataExchange.encodeFull(listOf(person), listOf(report), listOf(evaluation), listOf(cell))
@@ -58,6 +58,16 @@ class SummaryBackupTest {
         assertNull(back.extra)
         assertEquals("", back.comment)
         assertEquals(2.0, back.level!!, 0.0)
+    }
+
+    @Test fun bonusAloneKeepsTheCellAndRoundTrips() {
+        val only = SummaryCell("p1", "k", bonus = -1.0)
+        assertTrue(!only.isEmpty)
+        val back = (DataExchange.parse(DataExchange.encodeSummary(listOf(only))) as Incoming.Summary).list.single()
+        assertEquals(-1.0, back.bonus!!, 0.0)
+        assertNull(back.level)
+        assertNull(back.extra)
+        assertTrue(SummaryCell("p1", "k").isEmpty)
     }
 
     @Test fun mergeAddsUpdatesAndKeepsUnchanged() {

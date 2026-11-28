@@ -4,16 +4,17 @@ import java.util.Locale
 
 /**
  * The hand-typed part of one row of the جمع‌بندی table, for one person and one period:
- * [extra] is the third column (a number with a [comment] explaining it), [level] the fourth.
+ * [extra] is «ملاحظات» (a number with a [comment] explaining it), [level] is «رئیس» and [bonus] is «تشویقی».
  */
 data class SummaryCell(
     val personId: String,
     val periodKey: String,
     val extra: Double? = null,
     val comment: String = "",
-    val level: Double? = null
+    val level: Double? = null,
+    val bonus: Double? = null
 ) {
-    val isEmpty: Boolean get() = extra == null && comment.isBlank() && level == null
+    val isEmpty: Boolean get() = extra == null && comment.isBlank() && level == null && bonus == null
 }
 
 /** Every number in the app is a whole number: 4 -> "۴", 38.4 -> "۳۸", -2.5 -> "−۳" (halves go away from zero). */

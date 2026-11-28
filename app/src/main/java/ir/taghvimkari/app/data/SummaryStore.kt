@@ -31,6 +31,7 @@ class SummaryStore(context: Context) {
                         c.extra?.let { put("extra", it) }
                         put("comment", c.comment)
                         c.level?.let { put("level", it) }
+                        c.bonus?.let { put("bonus", it) }
                     }
                 )
             }
@@ -44,7 +45,8 @@ class SummaryStore(context: Context) {
                     periodKey = o.getString("periodKey"),
                     extra = if (o.has("extra") && !o.isNull("extra")) o.getDouble("extra") else null,
                     comment = o.optString("comment", ""),
-                    level = if (o.has("level") && !o.isNull("level")) o.getDouble("level") else null
+                    level = if (o.has("level") && !o.isNull("level")) o.getDouble("level") else null,
+                    bonus = if (o.has("bonus") && !o.isNull("bonus")) o.getDouble("bonus") else null
                 )
             }.getOrNull()
         }

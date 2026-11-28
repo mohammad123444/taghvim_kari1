@@ -17,6 +17,7 @@ data class PdfRow(
     val total: String,
     val extra: String,
     val level: String,
+    val bonus: String,
     val reward: String,
     val evaluation: String
 )
@@ -33,9 +34,9 @@ object SummaryPdf {
     private const val NAVY = 0xFF1F2A5A.toInt()
     private const val PURPLE = 0xFF5B3FA6.toInt()
 
-    // Columns from the right edge: name, جمع, ملاحظات, رئیس, تشویق / تنبیه, ارزشیابی (widths add up to the table width).
-    private val HEADERS = listOf("نام", "جمع", "ملاحظات", "رئیس", "تشویق / تنبیه", "ارزشیابی")
-    private val WIDTHS = listOf(175f, 55f, 70f, 55f, 95f, 85f)
+    // Columns from the right edge: name, جمع, رئیس, ملاحظات, تشویقی, تشویق / تنبیه, ارزشیابی (widths add up to the table width).
+    private val HEADERS = listOf("نام", "جمع", "رئیس", "ملاحظات", "تشویقی", "تشویق / تنبیه", "ارزشیابی")
+    private val WIDTHS = listOf(150f, 50f, 50f, 60f, 55f, 90f, 80f)
 
     private var fonts: Context? = null
 
@@ -115,7 +116,7 @@ object SummaryPdf {
                     drawHeader(g.title, g.rows.size)
                 }
                 val c = canvas!!
-                val values = listOf(r.name, r.total, r.extra, r.level, r.reward, r.evaluation)
+                val values = listOf(r.name, r.total, r.level, r.extra, r.bonus, r.reward, r.evaluation)
                 var right = tableRight
                 values.forEachIndexed { i, v ->
                     val p = when (i) {

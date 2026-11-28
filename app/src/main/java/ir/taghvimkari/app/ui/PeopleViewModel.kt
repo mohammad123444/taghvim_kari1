@@ -89,6 +89,18 @@ class PeopleViewModel(app: Application) : AndroidViewModel(app) {
         summaryStore.save(summaryCells)
     }
 
+    /** Sets (or, with null, clears) the «تشویقی» number of many people for one period in one go. */
+    fun setBonusForAll(personIds: Collection<String>, periodKey: String, value: Double?) {
+        var cells = summaryCells
+        for (id in personIds) {
+            val old = cells.firstOrNull { it.personId == id && it.periodKey == periodKey } ?: SummaryCell(id, periodKey)
+            val new = old.copy(bonus = value)
+            cells = cells.filterNot { it.personId == id && it.periodKey == periodKey } + (if (new.isEmpty) emptyList() else listOf(new))
+        }
+        summaryCells = cells
+        summaryStore.save(summaryCells)
+    }
+
     var updateUi: UpdateUi by mutableStateOf(UpdateUi.Idle)
         private set
 

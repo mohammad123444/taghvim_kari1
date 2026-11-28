@@ -597,6 +597,7 @@ private fun SummaryExchange(viewModel: PeopleViewModel, context: android.content
                         total = formatNumber(r.total),
                         extra = r.cell?.extra?.let { formatSigned(it) } ?: "—",
                         level = r.cell?.level?.let { formatNumber(it) } ?: "—",
+                        bonus = r.cell?.bonus?.let { formatSigned(it) } ?: "—",
                         reward = formatSigned(r.reward),
                         evaluation = r.evaluation?.let { formatScore(it) } ?: "—"
                     )
@@ -613,15 +614,16 @@ private fun SummaryExchange(viewModel: PeopleViewModel, context: android.content
 
     /** The same table as an Excel file: one sheet, one row per person, real numbers (not text). */
     fun makeExcel() {
-        val header = listOf("وضعیت استخدامی", "نام", "جمع", "ملاحظات", "رئیس", "تشویق / تنبیه", "ارزشیابی")
+        val header = listOf("وضعیت استخدامی", "نام", "جمع", "رئیس", "ملاحظات", "تشویقی", "تشویق / تنبیه", "ارزشیابی")
         val body = chosenKinds.flatMap { emp ->
             shownRows.filter { it.person.employment == emp }.map { r ->
                 listOf<Any?>(
                     summaryTitle(emp),
                     r.person.name + (if (!r.person.active) " • غیرفعال" else ""),
                     roundWhole(r.total),
-                    r.cell?.extra?.let { roundWhole(it) },
                     r.cell?.level?.let { roundWhole(it) },
+                    r.cell?.extra?.let { roundWhole(it) },
+                    r.cell?.bonus?.let { roundWhole(it) },
                     roundWhole(r.reward),
                     r.evaluation?.let { roundWhole(it) }
                 )
@@ -631,7 +633,7 @@ private fun SummaryExchange(viewModel: PeopleViewModel, context: android.content
             context,
             "taghvim-summary-${LocalDate.now()}.xlsx",
             Xlsx.MIME,
-            Xlsx.build("جمع‌بندی", listOf(header) + body, listOf(18, 28, 10, 12, 10, 16, 12)),
+            Xlsx.build("جمع‌بندی", listOf(header) + body, listOf(18, 28, 10, 10, 12, 12, 16, 12)),
             "ارسال جمع‌بندی (Excel)"
         )
     }

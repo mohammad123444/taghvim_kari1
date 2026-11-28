@@ -92,7 +92,7 @@ internal class SummaryRow(
     val reward: Double,
     val cell: SummaryCell?
 ) {
-    val total: Double get() = (evaluation ?: 0.0) + reward + (cell?.extra ?: 0.0) + (cell?.level ?: 0.0)
+    val total: Double get() = (evaluation ?: 0.0) + reward + (cell?.extra ?: 0.0) + (cell?.level ?: 0.0) + (cell?.bonus ?: 0.0)
 }
 
 /** The row of one person for the period [from]..[to]: evaluation average, reward / punishment net and the typed cell. */
@@ -126,7 +126,8 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
     var query by rememberSaveable { mutableStateOf("") }
     var picker by rememberSaveable { mutableStateOf(0) } // 0 closed, 1 from, 2 to
     var editPerson by rememberSaveable { mutableStateOf("") }
-    var editColumn by rememberSaveable { mutableStateOf(0) } // 3 = ملاحظات (number with comment), 4 = رئیس
+    var editColumn by rememberSaveable { mutableStateOf(0) } // 3 = ملاحظات (number with comment), 4 = رئیس, 5 = تشویقی
+    var bulkBonus by rememberSaveable { mutableStateOf(false) } // «تشویقی» for everybody at once
     var foldedGroups by rememberSaveable { mutableStateOf("") } // employment kinds that are folded
 
     val hasPeriod = fromEpoch != NO_DATE && toEpoch != NO_DATE
@@ -188,7 +189,7 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
                 }
             )
         } else {
-            val tableWidth = NAME_W + COL_W * 5
+            val tableWidth = NAME_W + COL_W * 6
             AppCard {
                 Column(Modifier.horizontalScroll(rememberScrollState()).width(tableWidth)) {
                     SUMMARY_ORDER.forEach { emp ->
@@ -215,8 +216,9 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
                             Row(Modifier.background(Purple.copy(alpha = .06f))) {
                                 SummaryCellBox(NAME_W, "نام", Purple, bold = true)
                                 SummaryCellBox(COL_W, "جمع", Purple, bold = true)
-                                SummaryCellBox(COL_W, "ملاحظات", Purple, bold = true)
                                 SummaryCellBox(COL_W, "رئیس", Purple, bold = true)
+                                SummaryCellBox(COL_W, "ملاحظات", Purple, bold = true)
+                                SummaryCellBox(COL_W, "تشویقی ✎", RewardGreen, bold = true, onClick = { bulkBonus = true })
                                 SummaryCellBox(COL_W, "تشویق / تنبیه", Purple, bold = true)
                                 SummaryCellBox(COL_W, "ارزشیابی", Purple, bold = true)
                             }
@@ -233,6 +235,12 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
                                     )
                                     SummaryCellBox(COL_W, formatNumber(r.total), Navy, bold = true, bg = Navy.copy(alpha = .08f))
                                     SummaryCellBox(
+                                        COL_W, r.cell?.level?.let { formatNumber(it) } ?: "—",
+                                        if (r.cell?.level == null) Color.Gray else Navy,
+                                        bg = Purple.copy(alpha = .06f),
+                                        onClick = { editPerson = r.person.id; editColumn = 4 }
+                                    )
+                                    SummaryCellBox(
                                         COL_W, r.cell?.extra?.let { formatSigned(it) } ?: "—",
                                         if (r.cell?.extra == null) Color.Gray else Navy,
                                         bg = Purple.copy(alpha = .06f),
@@ -240,10 +248,11 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
                                         onClick = { editPerson = r.person.id; editColumn = 3 }
                                     )
                                     SummaryCellBox(
-                                        COL_W, r.cell?.level?.let { formatNumber(it) } ?: "—",
-                                        if (r.cell?.level == null) Color.Gray else Navy,
-                                        bg = Purple.copy(alpha = .06f),
-                                        onClick = { editPerson = r.person.id; editColumn = 4 }
+                                        COL_W, r.cell?.bonus?.let { formatSigned(it) } ?: "—",
+                                        if (r.cell?.bonus == null) Color.Gray else RewardGreen,
+                                        bold = r.cell?.bonus != null,
+                                        bg = RewardGreen.copy(alpha = .07f),
+                                        onClick = { editPerson = r.person.id; editColumn = 5 }
                                     )
                                     SummaryCellBox(
                                         COL_W, formatSigned(r.reward),
@@ -262,7 +271,7 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
                 }
             }
             Text(
-                "ستون «ملاحظات» و «رئیس» را با لمس کردن پر کنید؛ در «ملاحظات» می‌توانید دلیلش را هم بنویسید و بعداً با لمس همان عدد ببینید.",
+                "ستون‌های «رئیس»، «ملاحظات» و «تشویقی» را با لمس کردن پر کنید؛ در «ملاحظات» می‌توانید دلیلش را هم بنویسید. با لمس عنوان «تشویقی ✎» یک عدد را یکجا برای همهٔ نیروهای فهرست ثبت می‌کنید.",
                 color = Color.Gray,
                 style = MaterialTheme.typography.bodySmall
             )
@@ -277,24 +286,47 @@ fun SummaryScreen(viewModel: PeopleViewModel) {
     if (editColumn != 0 && editRow != null) {
         val cell = editRow.cell
         val isExtra = editColumn == 3
+        val isBonus = editColumn == 5
+        val current: Double? = when (editColumn) { 3 -> cell?.extra; 5 -> cell?.bonus; else -> cell?.level }
         CellDialog(
-            title = editRow.person.name + " • " + if (isExtra) "ملاحظات" else "رئیس",
-            number = (if (isExtra) cell?.extra else cell?.level)?.let { formatNumber(it) }.orEmpty(),
+            title = editRow.person.name + " • " + when (editColumn) { 3 -> "ملاحظات"; 5 -> "تشویقی"; else -> "رئیس" },
+            number = current?.let { formatNumber(it) }.orEmpty(),
             comment = if (isExtra) cell?.comment.orEmpty() else null,
-            canClear = cell != null && (if (isExtra) cell.extra != null || cell.comment.isNotBlank() else cell.level != null),
+            canClear = cell != null && (current != null || (isExtra && cell.comment.isNotBlank())),
             onSave = { number, comment ->
                 viewModel.updateSummary(editRow.person.id, key) {
-                    if (isExtra) it.copy(extra = number, comment = comment.trim()) else it.copy(level = number)
+                    when {
+                        isExtra -> it.copy(extra = number, comment = comment.trim())
+                        isBonus -> it.copy(bonus = number)
+                        else -> it.copy(level = number)
+                    }
                 }
                 editColumn = 0
             },
             onClear = {
                 viewModel.updateSummary(editRow.person.id, key) {
-                    if (isExtra) it.copy(extra = null, comment = "") else it.copy(level = null)
+                    when {
+                        isExtra -> it.copy(extra = null, comment = "")
+                        isBonus -> it.copy(bonus = null)
+                        else -> it.copy(level = null)
+                    }
                 }
                 editColumn = 0
             },
             onDismiss = { editColumn = 0 }
+        )
+    }
+
+    // ----- «تشویقی» for everybody in the list at once
+    if (bulkBonus) {
+        BulkBonusDialog(
+            count = rows.size,
+            hasValues = rows.any { it.cell?.bonus != null },
+            onApply = { number ->
+                viewModel.setBonusForAll(rows.map { it.person.id }, key, number)
+                bulkBonus = false
+            },
+            onDismiss = { bulkBonus = false }
         )
     }
 
@@ -351,6 +383,46 @@ private fun SummaryCellBox(
             Text("●", Modifier.align(Alignment.TopStart), color = Purple, fontSize = 8.sp)
         }
     }
+}
+
+/** One number written for every person shown in the table («تشویقی»); an empty box with «پاک کردن همه» clears the column. */
+@Composable
+private fun BulkBonusDialog(count: Int, hasValues: Boolean, onApply: (Double?) -> Unit, onDismiss: () -> Unit) {
+    var n by remember { mutableStateOf("") }
+    val parsed = parseNumber(n)
+    val valid = parsed != null
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("تشویقی برای همه", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "این عدد برای ${count.toPersian()} نفرِ فهرست فعلی ثبت می‌شود و مقدار قبلی ستون «تشویقی» را عوض می‌کند. بعداً هر نفر را جدا هم می‌توانید تغییر دهید.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+                OutlinedTextField(
+                    shape = FormFieldShape, colors = formFieldColors(),
+                    value = n, onValueChange = { n = it },
+                    label = { Text("عدد (منفی هم می‌شود)") }, singleLine = true,
+                    textStyle = LocalTextStyle.current.copy(textDirection = TextDirection.Ltr),
+                    isError = n.isNotBlank() && !valid,
+                    modifier = Modifier.fillMaxWidth().keepVisibleWhenFocused()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onApply(parsed) }, enabled = valid) { Text("ثبت برای همه", fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            Row {
+                if (hasValues) {
+                    TextButton(onClick = { onApply(null) }) { Text("پاک کردن همه", color = MaterialTheme.colorScheme.error) }
+                }
+                TextButton(onClick = onDismiss) { Text("انصراف") }
+            }
+        }
+    )
 }
 
 /** A number, and (for the «عدد» column) the comment that explains it. */
