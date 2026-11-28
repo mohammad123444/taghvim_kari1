@@ -170,13 +170,11 @@ fun PersonCard(person: Person, status: DayStatus? = null, leaderName: String? = 
 /** One-line Persian summary of a [DayStatus]: how long the current work/rest stretch has lasted and how long remains. */
 fun statusLine(status: DayStatus): String {
     val left = status.remainingDays
+    // The state (work / rest) is already shown next to this line, so only the counts are written.
     return when {
-        // Today counts as a day that has passed: day 10 of 14 -> "10 passed, 4 left".
-        !status.started -> "${left.toPersian()} روز استراحت مانده"
-        status.working -> "${status.elapsedDays.toPersian()} روز از کار گذشته • " +
-            if (left > 0) "${left.toPersian()} روز کار مانده" else "امروز آخرین روز کار است"
-        else -> "${status.elapsedDays.toPersian()} روز از استراحت گذشته • " +
-            if (left > 0) "${left.toPersian()} روز استراحت مانده" else "امروز آخرین روز استراحت است"
+        !status.started -> "${left.toPersian()} روز مانده"
+        else -> "${status.elapsedDays.toPersian()} روز گذشته • " +
+            if (left > 0) "${left.toPersian()} روز مانده" else "امروز آخرین روز"
     }
 }
 

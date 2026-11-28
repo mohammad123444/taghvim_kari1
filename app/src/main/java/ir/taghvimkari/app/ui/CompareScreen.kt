@@ -179,32 +179,20 @@ fun CompareScreen(people: List<Person>) {
                 Text(dateBoxText("تا", toEpoch))
             }
         }
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("۱ روز" to 1, "۱ هفته" to 7, "۲ هفته" to 14, "۱ ماه" to 30, "۳ ماه" to 90, "۶ ماه" to 180).forEach { (label, n) ->
-                Surface(
-                    color = Purple.copy(alpha = .12f),
-                    shape = RoundedCornerShape(20.dp),
-                    modifier = Modifier.clip(RoundedCornerShape(20.dp)).clickable {
-                        if (fromEpoch == NO_DATE) fromEpoch = today.toEpochDay()
-                        toEpoch = fromEpoch + n - 1
-                    }
-                ) {
-                    Text(
-                        label,
-                        Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
-                        color = Purple,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                }
-            }
+        if (error != null) {
+            Text(
+                error,
+                color = Color(0xFFB3261E),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
         }
         OutlinedButton(onClick = { showPeople = true }, modifier = Modifier.fillMaxWidth()) {
             Text(if (chosen.isEmpty()) "انتخاب نیروها" else "نیروهای انتخاب‌شده: ${chosen.size.toPersian()} نفر (ویرایش)")
         }
 
         if (error != null) {
-            Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            // the red message is shown under the date boxes
         } else if (rows.isEmpty()) {
             EmptyMessage("نیروها را انتخاب کنید تا وضعیت کاری‌شان در بازهٔ انتخابی کنار هم نمایش داده شود.")
         } else {
@@ -285,9 +273,12 @@ fun CompareScreen(people: List<Person>) {
                 }
             }
             together?.let { (workRanges, restRanges) ->
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TogetherChip("همه با هم سر کار", workRanges.sumOf { it.days }, DayColor, Modifier.weight(1f)) { togetherDialog = 1 }
-                    TogetherChip("همه با هم در استراحت", restRanges.sumOf { it.days }, RestTextColor, Modifier.weight(1f)) { togetherDialog = 2 }
+                AppCard(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("همپوشانی برنامهٔ نیروهای انتخاب‌شده", color = Navy, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        TogetherTile("همه با هم سر کار", workRanges.sumOf { it.days }, DayColor, Modifier.weight(1f)) { togetherDialog = 1 }
+                        TogetherTile("همه با هم در استراحت", restRanges.sumOf { it.days }, RestTextColor, Modifier.weight(1f)) { togetherDialog = 2 }
+                    }
                 }
             }
         }
@@ -298,6 +289,7 @@ fun CompareScreen(people: List<Person>) {
         TogetherDialog(
             title = if (togetherDialog == 1) "همه با هم سر کار" else "همه با هم در استراحت",
             ranges = ranges,
+            color = if (togetherDialog == 1) DayColor else RestTextColor,
             onDismiss = { togetherDialog = 0 }
         )
     }
@@ -349,49 +341,91 @@ private fun rangesOf(flags: BooleanArray, from: LocalDate): List<DayRange> {
 }
 
 @Composable
-private fun TogetherChip(label: String, days: Int, color: Color, modifier: Modifier, onClick: () -> Unit) {
-    Surface(
-        color = color.copy(alpha = .12f),
-        shape = RoundedCornerShape(14.dp),
-        modifier = modifier.clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick)
+private fun TogetherTile(label: String, days: Int, color: Color, modifier: Modifier, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(16.dp)
+    val muted = days == 0
+    val tint = if (muted) Color.Gray else color
+    Column(
+        modifier = modifier
+            .clip(shape)
+            .background(tint.copy(alpha = .10f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, color = color, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-            Text("${days.toPersian()} روز ‹ جزئیات", color = color, fontSize = 11.sp)
+        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(days.toPersian(), color = tint, fontWeight = FontWeight.Bold, fontSize = 30.sp)
+            Text("روز", color = tint, fontSize = 13.sp, modifier = Modifier.padding(bottom = 5.dp))
         }
+        Text(label, color = tint, fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.Center)
+        Text(if (muted) "موردی نیست" else "مشاهدهٔ بازه‌ها ‹", color = tint.copy(alpha = .75f), fontSize = 11.sp)
     }
 }
 
 @Composable
-private fun TogetherDialog(title: String, ranges: List<DayRange>, onDismiss: () -> Unit) {
+private fun TogetherDialog(title: String, ranges: List<DayRange>, color: Color, onDismiss: () -> Unit) {
     val total = ranges.sumOf { it.days }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title, fontWeight = FontWeight.Bold) },
+        containerColor = Color.White,
+        shape = RoundedCornerShape(24.dp),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.size(12.dp).clip(RoundedCornerShape(50)).background(color))
+                Text(title, fontWeight = FontWeight.Bold, color = Navy)
+            }
+        },
         text = {
             if (ranges.isEmpty()) {
-                Text("در این بازه چنین روزی وجود ندارد.")
+                Text("در این بازه چنین روزی وجود ندارد.", color = Color.Gray)
             } else {
-                Column(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        "${total.toPersian()} روز در ${ranges.size.toPersian()} بازه",
-                        color = Navy,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    ranges.forEach { r ->
-                        val first = JalaliDate.from(r.start)
-                        val text = if (r.days == 1) {
-                            "${JalaliDate.WEEKDAY_NAMES[ShiftEngine.persianWeekday(r.start)]} ${first.display()}"
-                        } else {
-                            "از ${first.display()} تا ${JalaliDate.from(r.end).display()} (${r.days.toPersian()} روز)"
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Surface(color = color.copy(alpha = .12f), shape = RoundedCornerShape(12.dp)) {
+                        Text(
+                            "${total.toPersian()} روز در ${ranges.size.toPersian()} بازه",
+                            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                            color = color,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    Column(
+                        Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        ranges.forEach { r ->
+                            val first = JalaliDate.from(r.start)
+                            val text = if (r.days == 1) {
+                                "${JalaliDate.WEEKDAY_NAMES[ShiftEngine.persianWeekday(r.start)]} ${first.display()}"
+                            } else {
+                                "${first.display()}  تا  ${JalaliDate.from(r.end).display()}"
+                            }
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFFF4F3FA))
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Color(0xFF2B2B3A))
+                                Surface(color = color.copy(alpha = .14f), shape = RoundedCornerShape(50)) {
+                                    Text(
+                                        "${r.days.toPersian()} روز",
+                                        Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                                        color = color,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
                         }
-                        Text("• $text", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("بستن") } }
+        confirmButton = { TextButton(onClick = onDismiss) { Text("بستن", color = Purple, fontWeight = FontWeight.Bold) } }
     )
 }
 
