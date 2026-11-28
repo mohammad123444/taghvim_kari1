@@ -24,8 +24,13 @@ data class ReportEntry(
     val suggestedReward: Double? = null,
     val suggestedPunishment: Double? = null,
     /** The superior who gave the final opinion; blank = nobody has decided yet, the suggestion counts. */
-    val finalBy: String = ""
+    val finalBy: String = "",
+    /** The day the superior gave the final opinion; the hours count in the period of this day. null on old data: [date] is used. */
+    val finalDate: LocalDate? = null
 ) {
+    /** The day this report counts in the summary: the final-opinion day, or (still only a suggestion) its own date. */
+    val countDate: LocalDate get() = if (hasFinal) (finalDate ?: date) else date
+
     /** A superior has given his final opinion (even if he agreed with the suggestion). */
     val hasFinal: Boolean get() = finalBy.isNotBlank()
 
@@ -43,7 +48,7 @@ data class ReportEntry(
  * The final opinion (نظر نهایی) of a superior: [reward] / [punishment] become the hours that count. The reporter's
  * suggestion is kept beside them when it differs; when the superior leaves a number as it was, the suggestion stays.
  */
-fun ReportEntry.withFinal(by: String, reward: Double, punishment: Double): ReportEntry {
+fun ReportEntry.withFinal(by: String, reward: Double, punishment: Double, on: LocalDate = LocalDate.now()): ReportEntry {
     val oldReward = originalReward
     val oldPunishment = originalPunishment
     return copy(
@@ -51,7 +56,9 @@ fun ReportEntry.withFinal(by: String, reward: Double, punishment: Double): Repor
         punishmentHours = punishment,
         suggestedReward = if (reward != oldReward) oldReward else null,
         suggestedPunishment = if (punishment != oldPunishment) oldPunishment else null,
-        finalBy = by.trim()
+        finalBy = by.trim(),
+        // a later correction of the same opinion keeps its day, so a closed month does not change
+        finalDate = finalDate ?: on
     )
 }
 
@@ -61,7 +68,8 @@ fun ReportEntry.withoutFinal(): ReportEntry = copy(
     punishmentHours = originalPunishment,
     suggestedReward = null,
     suggestedPunishment = null,
-    finalBy = ""
+    finalBy = "",
+    finalDate = null
 )
 
 data class ReportTotals(val count: Int, val reward: Double, val punishment: Double) {
@@ -70,6 +78,9 @@ data class ReportTotals(val count: Int, val reward: Double, val punishment: Doub
 
 fun List<ReportEntry>.totals(): ReportTotals =
     ReportTotals(size, sumOf { it.rewardHours }, sumOf { it.punishmentHours })
+
+/** Only reports with a final opinion count in the summary; a report without one is just a suggestion. */
+fun List<ReportEntry>.countedTotals(): ReportTotals = filter { it.hasFinal }.totals()
 
 /** Hours are whole numbers too: 2 -> "۲", 1.5 -> "۲". */
 fun formatHours(hours: Double): String = formatNumber(hours)
@@ -175,7 +186,8 @@ fun mergeReports(current: List<ReportEntry>, incoming: List<ReportEntry>, people
                     punishmentHours = e.punishmentHours,
                     suggestedReward = e.suggestedReward,
                     suggestedPunishment = e.suggestedPunishment,
-                    finalBy = e.finalBy
+                    finalBy = e.finalBy,
+                    finalDate = e.finalDate
                 )
                 out[at] = updated
                 decided.add(updated)

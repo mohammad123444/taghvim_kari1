@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,6 +64,7 @@ import ir.taghvimkari.app.domain.ReportEntry
 import ir.taghvimkari.app.domain.ReportPeriod
 import ir.taghvimkari.app.domain.ReportTotals
 import ir.taghvimkari.app.domain.buildReportText
+import ir.taghvimkari.app.domain.countedTotals
 import ir.taghvimkari.app.domain.formatHours
 import ir.taghvimkari.app.domain.normalizeFa
 import ir.taghvimkari.app.domain.parseHours
@@ -112,14 +114,14 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
     val subjectQuery = normalizeFa(subjectFilter)
     val filtered = reports
         .filter {
-            period.contains(it.date) && (personFilter.isBlank() || it.personId == personFilter) &&
+            period.contains(it.countDate) && (personFilter.isBlank() || it.personId == personFilter) &&
                 (subjectQuery.isEmpty() || normalizeFa(it.title).contains(subjectQuery))
         }
         .sortedWith(compareBy<ReportEntry> { rankById[it.personId] ?: Int.MAX_VALUE }.thenByDescending { it.date }.thenBy { nameOf(it) })
-    val totals = filtered.totals()
+    val totals = filtered.countedTotals()
     val filterLabel = labelled.firstOrNull { it.first.id == personFilter }?.second ?: ALL_PEOPLE
     val perPerson = if (personFilter.isBlank()) {
-        filtered.groupBy { it.personId }
+        filtered.filter { it.hasFinal }.groupBy { it.personId }
             .map { (id, list) -> Triple(id, nameOf(list.first()), list.totals()) }
             .sortedWith(compareBy<Triple<String, String, ReportTotals>> { rankById[it.first] ?: Int.MAX_VALUE }.thenByDescending { it.third.net })
     } else {
@@ -243,7 +245,8 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
                 }
                 ShareBar(totals.reward, totals.punishment, height = 12.dp)
                 Text(
-                    "${totals.count.toPersian()} سابقه در این بازه",
+                    "${totals.count.toPersian()} سابقهٔ دارای نظر نهایی" +
+                        (filtered.size - totals.count).let { if (it > 0) " • ${it.toPersian()} در انتظار نظر نهایی" else "" },
                     color = Color.Gray,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -426,18 +429,23 @@ private fun ReportCard(entry: ReportEntry, name: String, member: Boolean, kind: 
     AppCard(onClick = onClick, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 StyledName(name, member, Modifier.weight(1f))
-                Text(JalaliDate.from(entry.date).display(), color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                Text(JalaliDate.from(entry.countDate).display(), color = Color.Gray, style = MaterialTheme.typography.bodySmall)
             }
-            // The title is the heading; the description of the violation below it is smaller and in another colour.
-            Text(entry.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+            // A small part of the report; the rest is «…». Tapping the text shows (or folds) all of it.
+            var expanded by remember { mutableStateOf(false) }
+            Text(
+                entry.fullText(),
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = if (expanded) Int.MAX_VALUE else 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }
+            )
             if ((kind != 2 && entry.rewardHours > 0) || (kind != 1 && entry.punishmentHours > 0)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (kind != 2 && entry.rewardHours > 0) HoursChip("تشویق ${formatHours(entry.rewardHours)} ساعت", RewardGreen)
-                    if (kind != 1 && entry.punishmentHours > 0) HoursChip("تنبیه ${formatHours(entry.punishmentHours)} ساعت", PunishRed)
+                    if (kind != 2 && entry.rewardHours > 0) HoursChip((if (entry.hasFinal) "" else "پیشنهاد ") + "تشویق ${formatHours(entry.rewardHours)} ساعت", RewardGreen)
+                    if (kind != 1 && entry.punishmentHours > 0) HoursChip((if (entry.hasFinal) "" else "پیشنهاد ") + "تنبیه ${formatHours(entry.punishmentHours)} ساعت", PunishRed)
                 }
-            }
-            if (entry.notes.isNotBlank()) {
-                Text(entry.notes, color = Color(0xFF6B6B88), fontSize = AppText.small, fontWeight = FontWeight.Normal)
             }
             // Who gave the reward / punishment: always shown, in plain sight (old records without a name say so).
             val hasReward = entry.rewardHours > 0
@@ -468,28 +476,32 @@ private fun ReportCard(entry: ReportEntry, name: String, member: Boolean, kind: 
                     )
                 }
             }
-            // The final opinion of a superior: his hours are the criterion; the reporter's suggestion stays visible.
+            // The final opinion of a superior: the first 3 letters of his name and only the number he changed.
             if (entry.hasFinal) {
                 Surface(color = Purple.copy(alpha = .09f), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("✅ نظر نهایی: ${entry.finalBy.trim()}", color = Purple, fontWeight = FontWeight.Bold, fontSize = AppText.body)
-                        Text(
-                            if (entry.changedByFinal) {
-                                "پیشنهاد اولیه: تشویق ${formatHours(entry.originalReward)} • تنبیه ${formatHours(entry.originalPunishment)} ساعت" +
-                                    " ← ملاک: تشویق ${formatHours(entry.rewardHours)} • تنبیه ${formatHours(entry.punishmentHours)} ساعت"
-                            } else {
-                                "مطابق پیشنهاد؛ همان ساعت پیشنهادی ملاک است."
-                            },
-                            color = Color(0xFF6B6B88),
-                            fontSize = AppText.small
-                        )
-                    }
+                    Text(
+                        finalOpinionText(entry),
+                        Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        color = Purple, fontWeight = FontWeight.Bold, fontSize = AppText.body
+                    )
                 }
             }
             TextButton(onClick = onFinal, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
                 Text(if (entry.hasFinal) "ویرایش نظر نهایی" else "✍️ ثبت نظر نهایی (مافوق)", fontWeight = FontWeight.Bold)
             }
     }
+}
+
+/** The report's text: the old separate «description» (if any) follows the first text. */
+private fun ReportEntry.fullText(): String = listOf(title, notes).map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n")
+
+/** «نظر نهایی» + the first 3 characters of the superior's name + only the number(s) he changed (no hours word, nothing else). */
+private fun finalOpinionText(e: ReportEntry): String {
+    val changes = buildList {
+        if (e.rewardHours != e.originalReward) add("${formatHours(e.rewardHours)} تشویق")
+        if (e.punishmentHours != e.originalPunishment) add("${formatHours(e.punishmentHours)} تنبیه")
+    }
+    return "✅ نظر نهایی ${e.finalBy.trim().take(3)}" + if (changes.isEmpty()) "" else ": " + changes.joinToString(" • ")
 }
 
 @Composable
@@ -527,11 +539,10 @@ private fun ReportEntryDialog(
     var personId by rememberSaveable { mutableStateOf(initial?.personId ?: presetPersonId) }
     var pickedIds by rememberSaveable { mutableStateOf(presetPersonId.takeIf { id -> labelled.any { it.first.id == id } } ?: "") }
     var dateEpoch by rememberSaveable { mutableStateOf((initial?.date ?: today).toEpochDay()) }
-    var title by rememberSaveable { mutableStateOf(initial?.title ?: "") }
+    var text by rememberSaveable { mutableStateOf(initial?.fullText() ?: "") }
     var reporter by rememberSaveable { mutableStateOf(initial?.reporter ?: lastReporter) }
     var reward by rememberSaveable { mutableStateOf(initial?.rewardHours?.takeIf { it > 0 }?.let { formatHours(it) } ?: "") }
     var punishment by rememberSaveable { mutableStateOf(initial?.punishmentHours?.takeIf { it > 0 }?.let { formatHours(it) } ?: "") }
-    var notes by rememberSaveable { mutableStateOf(initial?.notes ?: "") }
     var showPicker by rememberSaveable { mutableStateOf(false) }
     var showErrors by remember { mutableStateOf(false) }
 
@@ -543,7 +554,7 @@ private fun ReportEntryDialog(
         onDismiss = onDismiss,
         title = if (initial == null) "ثبت سابقهٔ جدید" else "ویرایش سابقه",
         icon = "📝",
-        subtitle = if (initial == null) "تشویق یا تنبیه یک یا چند نفر را ثبت کنید" else "اطلاعات سابقه را تغییر دهید",
+        subtitle = if (initial == null) "تشویق یا تنبیه یک یا چند نفر را ثبت کنید" else null,
         content = {
             FormSection(if (initial == null) "نفرات و تاریخ" else "نفر و تاریخ", icon = "👤") {
                 if (initial == null) {
@@ -637,28 +648,19 @@ private fun ReportEntryDialog(
             }
             FormSection("شرح سابقه", icon = "🗒") {
                 FormTextField(
-                    value = title, onValueChange = { title = it },
-                    label = "سابقه (موضوع)",
-                    singleLine = false, minLines = 2,
-                    isError = showErrors && title.isBlank()
-                )
-                FormTextField(
-                    value = notes, onValueChange = { notes = it },
-                    label = "شرح تخلف / توضیحات",
-                    singleLine = false, minLines = 2
+                    value = text, onValueChange = { text = it },
+                    label = "شرح سابقه",
+                    singleLine = false, minLines = 3,
+                    isError = showErrors && text.isBlank()
                 )
             }
-            FormSection(if (hasFinal) "ساعت (طبق نظر نهایی)" else "ساعت پیشنهادی", icon = "⏱") {
+            FormSection(if (hasFinal) "نظر نهایی" else "ساعت پیشنهادی", icon = "⏱") {
                 if (initial != null && hasFinal) {
                     // The hours now are the superior's: they change only through his final opinion.
                     Text(
-                        "نظر نهایی «${initial.finalBy.trim()}» ثبت شده است: تشویق ${formatHours(initial.rewardHours)} • " +
-                            "تنبیه ${formatHours(initial.punishmentHours)} ساعت." +
-                            if (initial.changedByFinal) {
-                                " (پیشنهاد اولیه: تشویق ${formatHours(initial.originalReward)} • تنبیه ${formatHours(initial.originalPunishment)})"
-                            } else {
-                                ""
-                            },
+                        finalOpinionText(initial).removePrefix("✅ "),
+                        fontWeight = FontWeight.Bold,
+                        color = Purple,
                         style = MaterialTheme.typography.bodyMedium
                     )
                     if (onFinal != null) {
@@ -700,18 +702,20 @@ private fun ReportEntryDialog(
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
-                    Text(
-                        "این ساعت‌ها پیشنهاد ثبت‌کننده است. مافوق می‌تواند بعد از دریافت، «نظر نهایی» بدهد؛ اگر عدد را عوض کند " +
-                            "عدد او ملاک است و اگر عوض نکند همین عدد پیشنهادی ملاک می‌ماند.",
-                        color = Color.Gray,
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    if (initial == null) {
+                        Text(
+                            "این ساعت‌ها پیشنهاد ثبت‌کننده است. مافوق می‌تواند بعد از دریافت، «نظر نهایی» بدهد؛ اگر عدد را عوض کند " +
+                                "عدد او ملاک است و اگر عوض نکند همین عدد پیشنهادی ملاک می‌ماند.",
+                            color = Color.Gray,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             }
         },
         confirmButton = {
             FormSaveButton("ذخیره", onClick = {
-                val valid = title.isNotBlank() && if (initial == null) picked.isNotEmpty() && reporter.isNotBlank() else personId.isNotBlank()
+                val valid = text.isNotBlank() && if (initial == null) picked.isNotEmpty() && reporter.isNotBlank() else personId.isNotBlank()
                 if (valid) {
                     if (initial == null) {
                         onSave(
@@ -721,10 +725,10 @@ private fun ReportEntryDialog(
                                     personId = id,
                                     personName = labelled.firstOrNull { it.first.id == id }?.first?.name ?: "",
                                     date = date,
-                                    title = title.trim(),
+                                    title = text.trim(),
                                     rewardHours = parseHours(reward),
                                     punishmentHours = parseHours(punishment),
-                                    notes = notes.trim(),
+                                    notes = "",
                                     reporter = reporter.trim()
                                 )
                             }
@@ -737,11 +741,11 @@ private fun ReportEntryDialog(
                                     personId = personId,
                                     personName = person?.name ?: initial.personName,
                                     date = date,
-                                    title = title.trim(),
+                                    title = text.trim(),
                                     // with a final opinion the hours stay as the superior set them
                                     rewardHours = if (hasFinal) initial.rewardHours else parseHours(reward),
                                     punishmentHours = if (hasFinal) initial.punishmentHours else parseHours(punishment),
-                                    notes = notes.trim(),
+                                    notes = "",
                                     reporter = reporter.trim()
                                 )
                             )

@@ -99,7 +99,7 @@ internal class SummaryRow(
 internal fun summaryRowFor(viewModel: PeopleViewModel, p: Person, from: LocalDate, to: LocalDate): SummaryRow {
     val key = periodKeyOf(from, to)
     val evals = viewModel.evaluations.filter { it.personId == p.id && it.isComplete && it.dateTo >= from && it.date <= to }
-    val reports = viewModel.reports.filter { it.personId == p.id && it.date >= from && it.date <= to }
+    val reports = viewModel.reports.filter { it.personId == p.id && it.hasFinal && it.countDate >= from && it.countDate <= to }
     return SummaryRow(
         person = p,
         evaluation = if (evals.isEmpty()) null else Evaluations.average(evals),
