@@ -59,6 +59,7 @@ import ir.taghvimkari.app.domain.ReportPeriod
 import ir.taghvimkari.app.domain.ReportTotals
 import ir.taghvimkari.app.domain.buildReportText
 import ir.taghvimkari.app.domain.formatHours
+import ir.taghvimkari.app.domain.normalizeFa
 import ir.taghvimkari.app.domain.parseHours
 import ir.taghvimkari.app.domain.displayOrder
 import ir.taghvimkari.app.domain.shiftRank
@@ -311,6 +312,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
             initial = null,
             presetPersonId = personFilter,
             lastReporter = viewModel.lastReporter,
+            knownReporters = reports.map { it.reporter },
             onDismiss = { showNew = false },
             onSave = { viewModel.saveReport(it); showNew = false },
             onDelete = null
@@ -324,6 +326,7 @@ fun ReportsScreen(viewModel: PeopleViewModel) {
             initial = editing,
             presetPersonId = "",
             lastReporter = viewModel.lastReporter,
+            knownReporters = reports.map { it.reporter },
             onDismiss = { editingId = null },
             onSave = { viewModel.saveReport(it); editingId = null },
             onDelete = { viewModel.deleteReport(editing.id); editingId = null }
@@ -424,6 +427,7 @@ private fun ReportEntryDialog(
     initial: ReportEntry?,
     presetPersonId: String,
     lastReporter: String,
+    knownReporters: List<String>,
     onDismiss: () -> Unit,
     onSave: (ReportEntry) -> Unit,
     onDelete: (() -> Unit)?
@@ -464,6 +468,33 @@ private fun ReportEntryDialog(
                     label = "چه کسی تشویق / تنبیه کرده است؟ (نام)",
                     isError = showErrors && initial == null && reporter.isBlank()
                 )
+                // Names offered while typing: people who gave earlier reports first, then every registered person.
+                val typed = normalizeFa(reporter.trim())
+                val suggestions = remember(typed, knownReporters, labelled) {
+                    if (typed.isEmpty()) {
+                        emptyList()
+                    } else {
+                        (knownReporters.map { it.trim() } + labelled.map { it.first.name.trim() })
+                            .filter { it.isNotBlank() }
+                            .distinctBy { normalizeFa(it) }
+                            .filter { val n = normalizeFa(it); n.contains(typed) && n != typed }
+                            .sortedBy { if (normalizeFa(it).startsWith(typed)) 0 else 1 }
+                            .take(6)
+                    }
+                }
+                if (suggestions.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        suggestions.forEach { name ->
+                            Surface(
+                                color = Purple.copy(alpha = .08f),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { reporter = name }
+                            ) {
+                                Text("👤 $name", Modifier.padding(horizontal = 12.dp, vertical = 9.dp), fontWeight = FontWeight.Bold, color = Navy)
+                            }
+                        }
+                    }
+                }
             }
             FormSection("شرح سابقه", icon = "🗒") {
                 FormTextField(
