@@ -479,7 +479,7 @@ private fun ReportCard(entry: ReportEntry, name: String, member: Boolean, kind: 
                     )
                 }
             }
-            // The final opinion of a superior: the first 3 letters of his name and only the number he changed.
+            // The final opinion of a superior: the full name and only the number he changed.
             if (entry.hasFinal) {
                 Surface(color = Purple.copy(alpha = .09f), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
                     Text(
@@ -498,13 +498,13 @@ private fun ReportCard(entry: ReportEntry, name: String, member: Boolean, kind: 
 /** The report's text: the old separate «description» (if any) follows the first text. */
 private fun ReportEntry.fullText(): String = listOf(title, notes).map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n")
 
-/** «نظر نهایی» + the first 3 characters of the superior's name + only the number(s) he changed (no hours word, nothing else). */
+/** «نظر نهایی» + the superior full name + only the number(s) he changed (no hours word, nothing else). */
 private fun finalOpinionText(e: ReportEntry): String {
     val changes = buildList {
         if (e.rewardHours != e.originalReward) add("${formatHours(e.rewardHours)} تشویق")
         if (e.punishmentHours != e.originalPunishment) add("${formatHours(e.punishmentHours)} تنبیه")
     }
-    return "✅ نظر نهایی ${e.finalBy.trim().take(3)}" + if (changes.isEmpty()) "" else ": " + changes.joinToString(" • ")
+    return "✅ نظر نهایی ${e.finalBy.trim()}" + if (changes.isEmpty()) "" else ": " + changes.joinToString(" • ")
 }
 
 @Composable
